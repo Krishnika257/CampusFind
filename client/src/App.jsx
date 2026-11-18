@@ -28,6 +28,9 @@ export default function App() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [editingItem, setEditingItem] = useState(false);
   const [editForm, setEditForm] = useState({});
+  const [claimProof, setClaimProof] = useState('');
+  const [showClaimForm, setShowClaimForm] = useState(false);
+  const [claims, setClaims] = useState([]);
 
   async function loadItems() {
     try {
@@ -46,6 +49,10 @@ export default function App() {
     const timer = setTimeout(loadItems, 250);
     return () => clearTimeout(timer);
   }, [filter, searchFields]);
+
+  useEffect(() => {
+    if (user?.role === 'admin' && token) loadAdminClaims();
+  }, [user?.role, token]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -117,6 +124,35 @@ export default function App() {
     return Boolean(user?.id && ownerId && String(ownerId) === String(user.id));
   }
 
+  async function submitClaim(event) {
+    event.preventDefault(); setMessage('');
+    try {
+      const response = await fetch(`${API}/items/${selectedItem._id}/claims`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ proof: claimProof }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not submit your claim.');
+      setClaimProof(''); setShowClaimForm(false); setMessage('Your claim was sent to campus staff for review.');
+    } catch (error) { setMessage(error.message); }
+  }
+
+  async function loadAdminClaims() {
+    try {
+      const response = await fetch(`${API}/admin/claims`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not load claims.');
+      setClaims(data.claims);
+    } catch (error) { setMessage(error.message); }
+  }
+
+  async function reviewClaim(claimId, status) {
+    setMessage('');
+    try {
+      const response = await fetch(`${API}/admin/claims/${claimId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ status }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not update this claim.');
+      setMessage(`Claim ${status}.`); await loadAdminClaims(); await loadItems();
+    } catch (error) { setMessage(error.message); }
+  }
+
   function signOut() {
     localStorage.removeItem('campusfind-token'); localStorage.removeItem('campusfind-user'); setToken(''); setUser(null); setMessage('You’ve signed out.');
   }
@@ -176,6 +212,14 @@ export default function App() {
               <div className="listing-list">{items.length ? items.map((item) => <article className="listing-card" key={item._id}><div className={`listing-type ${item.type}`}>{item.type === 'lost' ? 'Looking for' : 'Found on campus'}</div><h3>{item.title}</h3><p>{item.description}</p><div className="listing-meta"><span>◈ &nbsp;{item.category}</span><span>⌖ &nbsp;{item.location}</span></div><div className="listing-card-footer"><small>Shared by {item.owner?.name || 'Campus member'}</small><button className="details-link" type="button" onClick={() => showDetails(item)}>View details <span aria-hidden="true">→</span></button></div></article>) : <div className="empty-state"><span aria-hidden="true">⌕</span><h3>{Object.values(searchFields).some(Boolean) || filter !== 'all' ? 'No matching listings' : 'It starts with our community'}</h3><p>{Object.values(searchFields).some(Boolean) || filter !== 'all' ? 'Try changing or clearing a few filters.' : 'Lost or found something? Add the first post and help it find its way home.'}</p></div>}</div>
             </section>
           </div>
+          {user?.role === 'admin' && <section className="panel admin-claims" id="admin-claims">
+            <div className="panel-heading"><div><p className="eyebrow">STAFF REVIEW</p><h2>Pending ownership claims</h2></div><span className="admin-count">{claims.length}</span></div>
+            {claims.length ? <div className="claim-list">{claims.map((claim) => <article className="claim-card" key={claim._id}>
+              <div className="claim-card-heading"><div><h3>{claim.item?.title || 'Campus item'}</h3><p>{claim.item?.location || 'Location not listed'} · Claimed by {claim.claimant?.name || 'Campus member'}</p></div><span className="pending-pill">Pending review</span></div>
+              <p className="claim-proof">{claim.proof}</p>
+              <div className="claim-review-actions"><button className="button button-secondary reject-button" type="button" onClick={() => reviewClaim(claim._id, 'rejected')}>Reject claim</button><button className="button button-primary" type="button" onClick={() => reviewClaim(claim._id, 'approved')}>Approve &amp; mark returned</button></div>
+            </article>)}</div> : <div className="empty-state admin-empty"><span aria-hidden="true">✓</span><h3>All caught up</h3><p>New ownership claims will appear here for staff review.</p></div>}
+          </section>}
           {selectedItem && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedItem(null); }}>
             <section className="item-dialog" role="dialog" aria-modal="true" aria-labelledby="item-dialog-title">
               <div className="dialog-heading"><div><span className={`listing-type ${selectedItem.type}`}>{selectedItem.type === 'lost' ? 'Looking for' : 'Found on campus'}</span><p className="dialog-kicker">CAMPUS LISTING</p></div><button className="dialog-close" type="button" aria-label="Close details" onClick={() => setSelectedItem(null)}>×</button></div>
@@ -190,6 +234,10 @@ export default function App() {
                 <h2 id="item-dialog-title" className="item-dialog-title">{selectedItem.title}</h2>
                 <p className="item-dialog-description">{selectedItem.description}</p>
                 <div className="item-detail-grid"><div><span>Category</span><strong>{selectedItem.category}</strong></div><div><span>Location</span><strong>{selectedItem.location}</strong></div><div><span>Posted by</span><strong>{selectedItem.owner?.name || 'Campus member'}</strong></div><div><span>Date posted</span><strong>{selectedItem.createdAt ? new Date(selectedItem.createdAt).toLocaleDateString() : 'Recently'}</strong></div></div>
+                {user && selectedItem.type === 'found' && selectedItem.status === 'open' && !isItemOwner(selectedItem) && <div className="claim-action">
+                  {showClaimForm ? <form className="form-stack" onSubmit={submitClaim}><label>Proof of ownership<textarea required minLength="20" maxLength="1000" rows="4" placeholder="Describe a detail only the owner would know" value={claimProof} onChange={(e) => setClaimProof(e.target.value)} /><small>Share specific details to help campus staff verify your claim.</small></label><div className="dialog-actions"><button className="button button-secondary" type="button" onClick={() => setShowClaimForm(false)}>Cancel</button><button className="button button-primary" type="submit">Send claim</button></div></form> : <button className="button button-primary claim-button" type="button" onClick={() => setShowClaimForm(true)}>This is mine — submit a claim</button>}
+                </div>}
+                {!user && selectedItem.type === 'found' && <p className="sign-in-claim-note">Sign in to submit an ownership claim.</p>}
                 {isItemOwner(selectedItem) && <div className="dialog-actions owner-actions"><button className="button button-secondary" type="button" onClick={deleteItem}>Delete listing</button><button className="button button-primary" type="button" onClick={startEditing}>Edit listing</button></div>}
               </>}
             </section>
