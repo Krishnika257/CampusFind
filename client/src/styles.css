@@ -402,11 +402,80 @@ html[data-theme="dark"] .button-primary:hover { background: #6966c8; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
-.hero-art { flex: 0 0 224px; width: 224px; height: 204px; margin: 0 24px 0 12px; overflow: hidden; border: 1px solid #e7e3f0; border-radius: 22px; background: #fff; box-shadow: 0 15px 32px #37345d18; }
-.hero-art img { display: block; width: 100%; height: 100%; object-fit: contain; }
-html[data-theme="dark"] .hero-art { border-color: #55516e; background: #fff; box-shadow: 0 15px 32px #0004; }
-.hero-art { overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.hero-art img { filter: drop-shadow(0 15px 14px #29234430); animation: lost-found-float 5.2s ease-in-out infinite; }
+.listing-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
+.details-link { padding: 4px 0; border: 0; color: #5956ad; background: none; cursor: pointer; font: 700 11px 'DM Sans', sans-serif; }
+.details-link span { margin-left: 4px; }
+.details-link:hover { color: #383578; text-decoration: underline; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; background: #18162d80; backdrop-filter: blur(5px); }
+.item-dialog { width: min(560px, 100%); max-height: min(88vh, 760px); overflow: auto; padding: 26px; border: 1px solid #e4e0f0; border-radius: 19px; color: #292743; background: #fff; box-shadow: 0 24px 80px #17152e40; }
+.dialog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.dialog-kicker { margin: 9px 0 0; color: #85839a; font-size: 10px; font-weight: 800; letter-spacing: 1.3px; }
+.dialog-close { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid #e8e6ef; border-radius: 10px; color: #65637b; background: #f8f7fb; cursor: pointer; font-size: 22px; line-height: 1; }
+.item-dialog-title { margin: 21px 0 9px; color: #292743; font: 800 27px/1.2 'Manrope', sans-serif; letter-spacing: -.7px; }
+.item-dialog-description { margin: 0; color: #6c6a80; font-size: 14px; line-height: 1.7; white-space: pre-wrap; }
+.item-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 22px; }
+.item-detail-grid > div { display: grid; gap: 6px; padding: 13px; border: 1px solid #efedf4; border-radius: 10px; background: #faf9fd; }
+.item-detail-grid span { color: #8b899c; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; }
+.item-detail-grid strong { color: #393751; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 22px; }
+.dialog-actions .button { width: auto; min-height: 42px; font-size: 13px; }
+.button-secondary { border-color: #e4e1ed; color: #5e5c72; background: #fff; }
+.button-secondary:hover { border-color: #c8c4df; background: #f9f8fc; }
+.edit-form { margin-top: 20px; }
+html[data-theme="dark"] .details-link { color: #bab6ff; }
+html[data-theme="dark"] .details-link:hover { color: #e2e0ff; }
+html[data-theme="dark"] .item-dialog { border-color: #49485e; color: #eeedf7; background: #22232f; box-shadow: 0 24px 80px #0009; }
+html[data-theme="dark"] .dialog-close { border-color: #48485d; color: #d0cede; background: #2d2e3d; }
+html[data-theme="dark"] .dialog-kicker { color: #aaa8bd; }
+html[data-theme="dark"] .item-dialog-title { color: #f0eff9; }
+html[data-theme="dark"] .item-dialog-description { color: #c4c2d1; }
+html[data-theme="dark"] .item-detail-grid > div { border-color: #454555; background: #2a2b38; }
+html[data-theme="dark"] .item-detail-grid span { color: #aaa8bb; }
+html[data-theme="dark"] .item-detail-grid strong { color: #e2e0ed; }
+html[data-theme="dark"] .button-secondary { border-color: #4b4b60; color: #d3d1e1; background: #30313f; }
+html[data-theme="dark"] .button-secondary:hover { border-color: #7772b5; background: #38384a; }
+@media (max-width: 520px) {
+  .item-dialog { padding: 20px; border-radius: 16px; }
+  .item-dialog-title { font-size: 23px; }
+  .item-detail-grid { gap: 8px; }
+  .item-detail-grid > div { padding: 10px; }
+  .dialog-actions { flex-direction: column-reverse; }
+  .dialog-actions .button { width: 100%; }
+}
+.admin-claims { margin: 18px 24px 0; border-color: #e2e0f4; background: linear-gradient(145deg, #f4f3ff 0%, #fff 44%); }
+.admin-claims .panel-heading .eyebrow { color: #6c68bb; }
+.admin-count { display: grid; place-items: center; min-width: 30px; height: 30px; padding: 0 8px; border-radius: 10px; color: #fff; background: #625fc1; font-size: 12px; font-weight: 800; }
+.claim-list { display: grid; gap: 12px; }
+.claim-card { padding: 17px; border: 1px solid #e8e6f1; border-radius: 12px; background: #fff; }
+.claim-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; }
+.claim-card-heading h3 { margin: 0 0 5px; color: #302e4c; font: 700 16px 'Manrope', sans-serif; }
+.claim-card-heading p { margin: 0; color: #77758b; font-size: 12px; line-height: 1.5; }
+.pending-pill { flex: 0 0 auto; padding: 6px 9px; border-radius: 20px; color: #895d20; background: #fff3d9; font-size: 10px; font-weight: 700; }
+.claim-proof { margin: 14px 0 0; padding: 12px; border-left: 3px solid #aaa7e4; border-radius: 0 8px 8px 0; color: #5f5d76; background: #f7f6fc; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+.claim-review-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 14px; }
+.claim-review-actions .button { width: auto; min-height: 40px; font-size: 12px; }
+.reject-button { color: #9a4e52; }
+.claim-action { margin-top: 20px; padding-top: 18px; border-top: 1px solid #efedf4; }
+.claim-button { width: 100%; }
+.sign-in-claim-note { margin: 17px 0 0; color: #77758b; font-size: 12px; }
+html[data-theme="dark"] .admin-claims { border-color: #3e3d55; background: linear-gradient(145deg, #2b2a43 0%, #22232f 50%); }
+html[data-theme="dark"] .claim-card { border-color: #454556; background: #292a37; }
+html[data-theme="dark"] .claim-card-heading h3 { color: #efedf8; }
+html[data-theme="dark"] .claim-card-heading p, html[data-theme="dark"] .sign-in-claim-note { color: #b8b6c8; }
+html[data-theme="dark"] .pending-pill { color: #f0d18f; background: #4a3d2a; }
+html[data-theme="dark"] .claim-proof { border-left-color: #8984d2; color: #d1cfdf; background: #333244; }
+html[data-theme="dark"] .claim-action { border-top-color: #444353; }
+html[data-theme="dark"] .reject-button { color: #ffb8b7; }
+@media (max-width: 650px) {
+  .admin-claims { margin: 14px 4px 0; }
+  .claim-card-heading { flex-direction: column; }
+  .claim-review-actions { flex-direction: column-reverse; }
+  .claim-review-actions .button { width: 100%; }
+}
+
+/* Floating lost-and-found illustration from feat/dark-mode. */
+.hero-art { display: grid; flex: 0 0 224px; width: 224px; height: 204px; place-items: center; margin: 0 24px 0 12px; overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.hero-art img { display: block; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 15px 14px #29234430); animation: lost-found-float 5.2s ease-in-out infinite; }
 html[data-theme="dark"] .hero-art { border: 0; background: transparent; box-shadow: none; }
 html[data-theme="dark"] .hero-art img { filter: drop-shadow(0 17px 15px #0008); }
 @keyframes lost-found-float {
@@ -415,4 +484,11 @@ html[data-theme="dark"] .hero-art img { filter: drop-shadow(0 17px 15px #0008); 
 }
 @media (max-width: 850px) {
   .hero-art { flex-basis: 190px; width: 190px; height: 180px; margin-right: 4px; transform: none; }
+}
+@media (max-width: 650px) {
+  .hero-art { display: grid; flex-basis: 82px; width: 82px; height: 88px; margin: 0 0 0 4px; }
+  .hero-art img { width: 108px; max-height: 100px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-art img { animation: none; }
 }

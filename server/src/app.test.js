@@ -8,6 +8,7 @@ const secret = 'test-only-campusfind-secret';
 
 function createModels() {
   const users = [];
+  const claims = [];
   const itemModel = {
     lastFilter: null,
     find(filter) {
@@ -25,7 +26,17 @@ function createModels() {
     },
     async findOne(filter) { return users.find((user) => user.email === filter.email) || null; },
   };
-  return { users, User: userModel, Item: itemModel };
+  const claimModel = {
+    async findOne(filter) { return claims.find((claim) => claim.item === filter.item && claim.claimant === filter.claimant && claim.status === filter.status) || null; },
+    async create(fields) {
+      const claim = { id: `claim-${claims.length + 1}`, status: 'pending', ...fields, async save() { return this; } };
+      claims.push(claim);
+      return claim;
+    },
+    find() { return { sort() { return this; }, limit() { return this; }, async populate() { return claims; } }; },
+    async findById(id) { return claims.find((claim) => claim.id === id) || null; },
+  };
+  return { users, claims, User: userModel, Item: itemModel, Claim: claimModel };
 }
 
 describe('CampusFind API', () => {
@@ -94,5 +105,84 @@ describe('CampusFind API', () => {
     const malformed = await request(app).get('/api/items').query({ from: '2026-02-30' });
     expect(reversed.status).toBe(400);
     expect(malformed.status).toBe(400);
+  });
+
+  it('returns item details for a listing id', async () => {
+    const item = { id: 'item-1', title: 'Blue bottle', owner: { name: 'Riley' } };
+    models.Item.findById = vi.fn(() => ({ populate: async () => item }));
+    const response = await request(app).get('/api/items/item-1');
+    expect(response.status).toBe(200);
+    expect(response.body.item.title).toBe('Blue bottle');
+  });
+
+  it('only allows the owner to edit a listing', async () => {
+    const item = { id: 'item-1', owner: { toString: () => 'user-7' }, title: 'Old title', async save() { return this; } };
+    models.Item.findById = vi.fn().mockResolvedValue(item);
+    const otherUserToken = jwt.sign({}, secret, { subject: 'user-8', expiresIn: '1h' });
+    const ownerToken = jwt.sign({}, secret, { subject: 'user-7', expiresIn: '1h' });
+
+    const forbidden = await request(app).patch('/api/items/item-1').set('Authorization', `Bearer ${otherUserToken}`).send({ title: 'Changed title' });
+    const updated = await request(app).patch('/api/items/item-1').set('Authorization', `Bearer ${ownerToken}`).send({ title: 'Changed title' });
+    expect(forbidden.status).toBe(403);
+    expect(updated.status).toBe(200);
+    expect(updated.body.item.title).toBe('Changed title');
+  });
+
+  it('only allows the owner to delete a listing', async () => {
+    const item = { id: 'item-1', owner: { toString: () => 'user-7' }, async deleteOne() { this.deleted = true; } };
+    models.Item.findById = vi.fn().mockResolvedValue(item);
+    const otherUserToken = jwt.sign({}, secret, { subject: 'user-8', expiresIn: '1h' });
+    const ownerToken = jwt.sign({}, secret, { subject: 'user-7', expiresIn: '1h' });
+
+    const forbidden = await request(app).delete('/api/items/item-1').set('Authorization', `Bearer ${otherUserToken}`);
+    const deleted = await request(app).delete('/api/items/item-1').set('Authorization', `Bearer ${ownerToken}`);
+    expect(forbidden.status).toBe(403);
+    expect(deleted.status).toBe(204);
+    expect(item.deleted).toBe(true);
+  });
+
+  it('allows signed-in users to submit proof for another person’s found item', async () => {
+    const item = { id: 'item-1', owner: { toString: () => 'owner-1' }, type: 'found', status: 'open' };
+    models.Item.findById = vi.fn().mockResolvedValue(item);
+    const token = jwt.sign({ role: 'student' }, secret, { subject: 'user-2', expiresIn: '1h' });
+    const response = await request(app).post('/api/items/item-1/claims').set('Authorization', `Bearer ${token}`).send({ proof: 'There is a small scratch on the left side.' });
+    expect(response.status).toBe(201);
+    expect(response.body.claim).toMatchObject({ item: 'item-1', claimant: 'user-2', status: 'pending' });
+  });
+
+  it('rejects a claim on your own item and duplicate pending claims', async () => {
+    const item = { id: 'item-1', owner: { toString: () => 'user-2' }, type: 'found', status: 'open' };
+    models.Item.findById = vi.fn().mockResolvedValue(item);
+    const token = jwt.sign({}, secret, { subject: 'user-2', expiresIn: '1h' });
+    const ownClaim = await request(app).post('/api/items/item-1/claims').set('Authorization', `Bearer ${token}`).send({ proof: 'I can identify the contents inside.' });
+    expect(ownClaim.status).toBe(400);
+
+    item.owner = { toString: () => 'someone-else' };
+    await request(app).post('/api/items/item-1/claims').set('Authorization', `Bearer ${token}`).send({ proof: 'I can identify the contents inside.' });
+    const duplicate = await request(app).post('/api/items/item-1/claims').set('Authorization', `Bearer ${token}`).send({ proof: 'Another ownership detail is included.' });
+    expect(duplicate.status).toBe(409);
+  });
+
+  it('restricts claim review to admins and marks an approved item claimed', async () => {
+    const item = { id: 'item-1', status: 'open', async save() { return this; } };
+    const claim = { id: 'claim-1', item: 'item-1', status: 'pending', async save() { return this; } };
+    models.Item.findById = vi.fn().mockResolvedValue(item);
+    models.Claim.findById = vi.fn().mockResolvedValue(claim);
+    const studentToken = jwt.sign({ role: 'student' }, secret, { subject: 'user-2', expiresIn: '1h' });
+    const adminToken = jwt.sign({ role: 'admin' }, secret, { subject: 'admin-1', expiresIn: '1h' });
+
+    const forbidden = await request(app).get('/api/admin/claims').set('Authorization', `Bearer ${studentToken}`);
+    const approved = await request(app).patch('/api/admin/claims/claim-1').set('Authorization', `Bearer ${adminToken}`).send({ status: 'approved', adminNotes: 'Identity details verified.' });
+    expect(forbidden.status).toBe(403);
+    expect(approved.status).toBe(200);
+    expect(approved.body.claim).toMatchObject({ status: 'approved', reviewedBy: 'admin-1' });
+    expect(item.status).toBe('claimed');
+  });
+
+  it('does not allow public registration to assign an administrator role', async () => {
+    const response = await request(app).post('/api/auth/register').send({ name: 'Campus Security', email: 'security@jiit.ac.in', password: 'secure-pass-123', role: 'admin' });
+    expect(response.status).toBe(201);
+    expect(response.body.user.role).toBe('student');
+    expect(jwt.verify(response.body.token, secret).role).toBe('student');
   });
 });
