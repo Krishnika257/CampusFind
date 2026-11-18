@@ -20,6 +20,7 @@ export default function App() {
   const [mode, setMode] = useState('login');
   const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
   const [itemForm, setItemForm] = useState(emptyItem);
+  const [theme, setTheme] = useState(() => localStorage.getItem('campusfind-theme') || 'light');
   const [items, setItems] = useState([]);
   const [filter, setFilter] = useState('all');
   const [searchFields, setSearchFields] = useState({ q: '', category: '', location: '', from: '', to: '' });
@@ -42,6 +43,11 @@ export default function App() {
     const timer = setTimeout(loadItems, 250);
     return () => clearTimeout(timer);
   }, [filter, searchFields]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('campusfind-theme', theme);
+  }, [theme]);
 
   async function submitAuth(event) {
     event.preventDefault(); setMessage('');
@@ -79,7 +85,7 @@ export default function App() {
         <div className="dashboard-content">
           <header className="topbar">
             <a className="brand" href="/" aria-label="CampusFind home"><span className="brand-mark"><CampusFindMark /></span><span>Campus<span className="brand-accent">Find</span></span></a>
-            <div className="account-area"><span className="campus-chip"><span className="campus-dot" /> JIIT · NOIDA CAMPUS</span>{user ? <><span className="welcome">Hi, {user.name}</span><button className="text-button" onClick={signOut}>Sign out</button></> : <span className="campus-label">Welcome to your campus board</span>}</div>
+            <div className="account-area"><span className="campus-chip"><span className="campus-dot" /> JIIT · NOIDA CAMPUS</span><button className="theme-toggle" type="button" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span></button>{user ? <><span className="welcome">Hi, {user.name}</span><button className="text-button" onClick={signOut}>Sign out</button></> : <span className="campus-label">Welcome to your campus board</span>}</div>
           </header>
 
           <section className="hero compact-hero" aria-labelledby="hero-title">

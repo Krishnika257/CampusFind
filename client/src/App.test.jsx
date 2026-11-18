@@ -6,6 +6,7 @@ import App from './App.jsx';
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  delete document.documentElement.dataset.theme;
   vi.unstubAllGlobals();
 });
 
@@ -41,5 +42,24 @@ describe('CampusFind board', () => {
     fireEvent.click(clear);
     expect(screen.getByRole('textbox', { name: 'Search items' })).toHaveValue('');
     expect(screen.getByRole('combobox', { name: 'Filter by category' })).toHaveValue('');
+  });
+
+  it('toggles dark mode and remembers the selected theme', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ items: [] }) }));
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to dark mode' }));
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+    expect(localStorage.getItem('campusfind-theme')).toBe('dark');
+    expect(screen.getByRole('button', { name: 'Switch to light mode' })).toBeInTheDocument();
+  });
+
+  it('restores a saved dark theme on startup', async () => {
+    localStorage.setItem('campusfind-theme', 'dark');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ items: [] }) }));
+    render(<App />);
+
+    await waitFor(() => expect(document.documentElement).toHaveAttribute('data-theme', 'dark'));
+    expect(screen.getByRole('button', { name: 'Switch to light mode' })).toBeInTheDocument();
   });
 });
