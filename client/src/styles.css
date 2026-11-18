@@ -442,3 +442,33 @@ html[data-theme="dark"] .button-secondary:hover { border-color: #7772b5; backgro
   .dialog-actions { flex-direction: column-reverse; }
   .dialog-actions .button { width: 100%; }
 }
+.admin-claims { margin: 18px 24px 0; border-color: #e2e0f4; background: linear-gradient(145deg, #f4f3ff 0%, #fff 44%); }
+.admin-claims .panel-heading .eyebrow { color: #6c68bb; }
+.admin-count { display: grid; place-items: center; min-width: 30px; height: 30px; padding: 0 8px; border-radius: 10px; color: #fff; background: #625fc1; font-size: 12px; font-weight: 800; }
+.claim-list { display: grid; gap: 12px; }
+.claim-card { padding: 17px; border: 1px solid #e8e6f1; border-radius: 12px; background: #fff; }
+.claim-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; }
+.claim-card-heading h3 { margin: 0 0 5px; color: #302e4c; font: 700 16px 'Manrope', sans-serif; }
+.claim-card-heading p { margin: 0; color: #77758b; font-size: 12px; line-height: 1.5; }
+.pending-pill { flex: 0 0 auto; padding: 6px 9px; border-radius: 20px; color: #895d20; background: #fff3d9; font-size: 10px; font-weight: 700; }
+.claim-proof { margin: 14px 0 0; padding: 12px; border-left: 3px solid #aaa7e4; border-radius: 0 8px 8px 0; color: #5f5d76; background: #f7f6fc; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+.claim-review-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 14px; }
+.claim-review-actions .button { width: auto; min-height: 40px; font-size: 12px; }
+.reject-button { color: #9a4e52; }
+.claim-action { margin-top: 20px; padding-top: 18px; border-top: 1px solid #efedf4; }
+.claim-button { width: 100%; }
+.sign-in-claim-note { margin: 17px 0 0; color: #77758b; font-size: 12px; }
+html[data-theme="dark"] .admin-claims { border-color: #3e3d55; background: linear-gradient(145deg, #2b2a43 0%, #22232f 50%); }
+html[data-theme="dark"] .claim-card { border-color: #454556; background: #292a37; }
+html[data-theme="dark"] .claim-card-heading h3 { color: #efedf8; }
+html[data-theme="dark"] .claim-card-heading p, html[data-theme="dark"] .sign-in-claim-note { color: #b8b6c8; }
+html[data-theme="dark"] .pending-pill { color: #f0d18f; background: #4a3d2a; }
+html[data-theme="dark"] .claim-proof { border-left-color: #8984d2; color: #d1cfdf; background: #333244; }
+html[data-theme="dark"] .claim-action { border-top-color: #444353; }
+html[data-theme="dark"] .reject-button { color: #ffb8b7; }
+@media (max-width: 650px) {
+  .admin-claims { margin: 14px 4px 0; }
+  .claim-card-heading { flex-direction: column; }
+  .claim-review-actions { flex-direction: column-reverse; }
+  .claim-review-actions .button { width: 100%; }
+}

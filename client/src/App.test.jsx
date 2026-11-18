@@ -97,4 +97,45 @@ describe('CampusFind board', () => {
     expect(await within(dialog).findByRole('heading', { name: 'Blue bottle edited' })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/items/item-1'), expect.objectContaining({ method: 'PATCH' }));
   });
+
+  it('lets a signed-in student submit proof for a found item', async () => {
+    localStorage.setItem('campusfind-user', JSON.stringify({ id: 'claimant-1', name: 'Riley', role: 'student' }));
+    localStorage.setItem('campusfind-token', 'student-token');
+    const item = { _id: 'item-1', title: 'Green umbrella', description: 'Found by the cafe', category: 'Other', location: 'Cafe', type: 'found', status: 'open', owner: { _id: 'owner-1', name: 'Ari' } };
+    const fetchMock = vi.fn().mockImplementation(async (url, options = {}) => {
+      if (String(url).endsWith('/claims') && options.method === 'POST') return { ok: true, json: async () => ({ claim: { status: 'pending' } }) };
+      if (String(url).endsWith('/item-1')) return { ok: true, json: async () => ({ item }) };
+      return { ok: true, json: async () => ({ items: [item] }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /View details/i }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: /submit a claim/i }));
+    fireEvent.change(within(dialog).getByPlaceholderText('Describe a detail only the owner would know'), { target: { value: 'A small tear is inside the left pocket.' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send claim' }));
+
+    expect(await screen.findByText(/sent to campus staff for review/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/items/item-1/claims'), expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('shows pending claims to admins and lets them approve one', async () => {
+    localStorage.setItem('campusfind-user', JSON.stringify({ id: 'admin-1', name: 'Campus Security', role: 'admin' }));
+    localStorage.setItem('campusfind-token', 'admin-token');
+    const claim = { _id: 'claim-1', item: { title: 'Green umbrella', location: 'Cafe' }, claimant: { name: 'Riley' }, proof: 'A small tear is inside the left pocket.' };
+    let reviewed = false;
+    const fetchMock = vi.fn().mockImplementation(async (url, options = {}) => {
+      if (String(url).endsWith('/admin/claims/claim-1') && options.method === 'PATCH') { reviewed = true; return { ok: true, json: async () => ({ claim: { ...claim, status: 'approved' } }) }; }
+      if (String(url).endsWith('/admin/claims')) return { ok: true, json: async () => ({ claims: reviewed ? [] : [claim] }) };
+      return { ok: true, json: async () => ({ items: [] }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+
+    expect(await screen.findByText('Pending ownership claims')).toBeInTheDocument();
+    expect(await screen.findByText('A small tear is inside the left pocket.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Approve & mark returned' }));
+    expect(await screen.findByText('All caught up')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/admin/claims/claim-1'), expect.objectContaining({ method: 'PATCH' }));
+  });
 });

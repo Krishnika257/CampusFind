@@ -3,9 +3,9 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
-import { Item as defaultItem, User as defaultUser } from './models.js';
+import { Claim as defaultClaim, Item as defaultItem, User as defaultUser } from './models.js';
 
-export function createApp({ User = defaultUser, Item = defaultItem, jwtSecret = process.env.JWT_SECRET } = {}) {
+export function createApp({ User = defaultUser, Item = defaultItem, Claim = defaultClaim, jwtSecret = process.env.JWT_SECRET } = {}) {
   const app = express();
   app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173' }));
   app.use(express.json({ limit: '1mb' }));
@@ -14,11 +14,18 @@ export function createApp({ User = defaultUser, Item = defaultItem, jwtSecret = 
     const token = request.headers.authorization?.replace(/^Bearer\s+/i, '');
     if (!token) return response.status(401).json({ message: 'Please sign in to continue.' });
     try {
-      request.userId = jwt.verify(token, jwtSecret).sub;
+      const payload = jwt.verify(token, jwtSecret);
+      request.userId = payload.sub;
+      request.userRole = payload.role || 'student';
       next();
     } catch {
       return response.status(401).json({ message: 'Your session expired. Please sign in again.' });
     }
+  }
+
+  function requireAdmin(request, response, next) {
+    if (request.userRole !== 'admin') return response.status(403).json({ message: 'Administrator access is required.' });
+    next();
   }
 
   app.get('/api/health', (_request, response) => {
@@ -32,9 +39,10 @@ export function createApp({ User = defaultUser, Item = defaultItem, jwtSecret = 
       if (password.length < 8) return response.status(400).json({ message: 'Password must be at least 8 characters.' });
       const normalizedEmail = email.trim().toLowerCase();
       if (await User.exists({ email: normalizedEmail })) return response.status(409).json({ message: 'An account with that email already exists.' });
-      const user = await User.create({ name: name.trim(), email: normalizedEmail, passwordHash: await bcrypt.hash(password, 12) });
-      const token = jwt.sign({}, jwtSecret, { subject: user.id, expiresIn: '7d' });
-      return response.status(201).json({ token, user: { id: user.id, name: user.name, email: user.email } });
+      const role = 'student';
+      const user = await User.create({ name: name.trim(), email: normalizedEmail, role, passwordHash: await bcrypt.hash(password, 12) });
+      const token = jwt.sign({ role: user.role }, jwtSecret, { subject: user.id, expiresIn: '7d' });
+      return response.status(201).json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
     } catch (error) { return next(error); }
   });
 
@@ -42,8 +50,9 @@ export function createApp({ User = defaultUser, Item = defaultItem, jwtSecret = 
     try {
       const user = await User.findOne({ email: request.body.email?.trim().toLowerCase() });
       if (!user || !(await bcrypt.compare(request.body.password || '', user.passwordHash))) return response.status(401).json({ message: 'Email or password is incorrect.' });
-      const token = jwt.sign({}, jwtSecret, { subject: user.id, expiresIn: '7d' });
-      return response.json({ token, user: { id: user.id, name: user.name, email: user.email } });
+      const role = user.role || 'student';
+      const token = jwt.sign({ role }, jwtSecret, { subject: user.id, expiresIn: '7d' });
+      return response.json({ token, user: { id: user.id, name: user.name, email: user.email, role } });
     } catch (error) { return next(error); }
   });
 
@@ -118,6 +127,50 @@ export function createApp({ User = defaultUser, Item = defaultItem, jwtSecret = 
       if (item.owner?.toString() !== request.userId) return response.status(403).json({ message: 'You can only delete your own listings.' });
       await item.deleteOne();
       return response.status(204).end();
+    } catch (error) { return next(error); }
+  });
+
+  app.post('/api/items/:id/claims', requireAuth, async (request, response, next) => {
+    try {
+      const item = await Item.findById(request.params.id);
+      if (!item) return response.status(404).json({ message: 'Listing not found.' });
+      if (item.owner?.toString() === request.userId) return response.status(400).json({ message: 'You cannot claim your own listing.' });
+      if (item.type !== 'found' || item.status !== 'open') return response.status(400).json({ message: 'Only open found listings can receive claims.' });
+      const proof = request.body.proof?.trim();
+      if (!proof || proof.length < 20 || proof.length > 1000) return response.status(400).json({ message: 'Please provide 20 to 1000 characters describing proof of ownership.' });
+      if (await Claim.findOne({ item: item.id, claimant: request.userId, status: 'pending' })) return response.status(409).json({ message: 'You already have a pending claim for this listing.' });
+      const claim = await Claim.create({ item: item.id, claimant: request.userId, proof });
+      return response.status(201).json({ claim });
+    } catch (error) { return next(error); }
+  });
+
+  app.get('/api/admin/claims', requireAuth, requireAdmin, async (_request, response, next) => {
+    try {
+      const claims = await Claim.find({ status: 'pending' }).sort({ createdAt: 1 }).limit(100).populate([{ path: 'item', select: 'title location' }, { path: 'claimant', select: 'name email' }]);
+      return response.json({ claims });
+    } catch (error) { return next(error); }
+  });
+
+  app.patch('/api/admin/claims/:id', requireAuth, requireAdmin, async (request, response, next) => {
+    try {
+      const { status, adminNotes = '' } = request.body;
+      if (!['approved', 'rejected'].includes(status)) return response.status(400).json({ message: 'Decision must be approved or rejected.' });
+      if (typeof adminNotes !== 'string' || adminNotes.trim().length > 500) return response.status(400).json({ message: 'Admin notes must be 500 characters or fewer.' });
+      const claim = await Claim.findById(request.params.id);
+      if (!claim) return response.status(404).json({ message: 'Claim not found.' });
+      if (claim.status !== 'pending') return response.status(409).json({ message: 'This claim has already been reviewed.' });
+      if (status === 'approved') {
+        const item = await Item.findById(claim.item.toString());
+        if (!item || item.status !== 'open') return response.status(409).json({ message: 'The listing is no longer available.' });
+        item.status = 'claimed';
+        await item.save();
+      }
+      claim.status = status;
+      claim.adminNotes = adminNotes.trim();
+      claim.reviewedBy = request.userId;
+      claim.reviewedAt = new Date();
+      await claim.save();
+      return response.json({ claim });
     } catch (error) { return next(error); }
   });
 
