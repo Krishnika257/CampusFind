@@ -95,4 +95,38 @@ describe('CampusFind API', () => {
     expect(reversed.status).toBe(400);
     expect(malformed.status).toBe(400);
   });
+
+  it('returns item details for a listing id', async () => {
+    const item = { id: 'item-1', title: 'Blue bottle', owner: { name: 'Riley' } };
+    models.Item.findById = vi.fn(() => ({ populate: async () => item }));
+    const response = await request(app).get('/api/items/item-1');
+    expect(response.status).toBe(200);
+    expect(response.body.item.title).toBe('Blue bottle');
+  });
+
+  it('only allows the owner to edit a listing', async () => {
+    const item = { id: 'item-1', owner: { toString: () => 'user-7' }, title: 'Old title', async save() { return this; } };
+    models.Item.findById = vi.fn().mockResolvedValue(item);
+    const otherUserToken = jwt.sign({}, secret, { subject: 'user-8', expiresIn: '1h' });
+    const ownerToken = jwt.sign({}, secret, { subject: 'user-7', expiresIn: '1h' });
+
+    const forbidden = await request(app).patch('/api/items/item-1').set('Authorization', `Bearer ${otherUserToken}`).send({ title: 'Changed title' });
+    const updated = await request(app).patch('/api/items/item-1').set('Authorization', `Bearer ${ownerToken}`).send({ title: 'Changed title' });
+    expect(forbidden.status).toBe(403);
+    expect(updated.status).toBe(200);
+    expect(updated.body.item.title).toBe('Changed title');
+  });
+
+  it('only allows the owner to delete a listing', async () => {
+    const item = { id: 'item-1', owner: { toString: () => 'user-7' }, async deleteOne() { this.deleted = true; } };
+    models.Item.findById = vi.fn().mockResolvedValue(item);
+    const otherUserToken = jwt.sign({}, secret, { subject: 'user-8', expiresIn: '1h' });
+    const ownerToken = jwt.sign({}, secret, { subject: 'user-7', expiresIn: '1h' });
+
+    const forbidden = await request(app).delete('/api/items/item-1').set('Authorization', `Bearer ${otherUserToken}`);
+    const deleted = await request(app).delete('/api/items/item-1').set('Authorization', `Bearer ${ownerToken}`);
+    expect(forbidden.status).toBe(403);
+    expect(deleted.status).toBe(204);
+    expect(item.deleted).toBe(true);
+  });
 });
