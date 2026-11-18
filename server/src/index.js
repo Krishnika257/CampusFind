@@ -72,10 +72,37 @@ app.get('/api/items', async (request, response, next) => {
   try {
     const filter = { status: 'open' };
     if (['lost', 'found'].includes(request.query.type)) filter.type = request.query.type;
+    const { q, category, location, from, to } = request.query;
+    if (category) filter.category = category;
+    if (location?.trim()) filter.location = { $regex: escapeRegex(location.trim().slice(0, 80)), $options: 'i' };
+    if (q?.trim()) {
+      const expression = { $regex: escapeRegex(q.trim().slice(0, 100)), $options: 'i' };
+      filter.$or = [{ title: expression }, { description: expression }];
+    }
+    if (from || to) {
+      const createdAt = {};
+      if (from) {
+        const start = new Date(`${from}T00:00:00.000Z`);
+        if (Number.isNaN(start.valueOf())) return response.status(400).json({ message: 'Start date is invalid.' });
+        createdAt.$gte = start;
+      }
+      if (to) {
+        const end = new Date(`${to}T00:00:00.000Z`);
+        if (Number.isNaN(end.valueOf())) return response.status(400).json({ message: 'End date is invalid.' });
+        end.setUTCDate(end.getUTCDate() + 1);
+        createdAt.$lt = end;
+      }
+      if (createdAt.$gte && createdAt.$lt && createdAt.$gte >= createdAt.$lt) return response.status(400).json({ message: 'Start date must be on or before end date.' });
+      filter.createdAt = createdAt;
+    }
     const items = await Item.find(filter).sort({ createdAt: -1 }).limit(100).populate('owner', 'name');
     return response.json({ items });
   } catch (error) { return next(error); }
 });
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 app.post('/api/items', requireAuth, async (request, response, next) => {
   try {
