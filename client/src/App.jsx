@@ -25,6 +25,9 @@ export default function App() {
   const [filter, setFilter] = useState('all');
   const [searchFields, setSearchFields] = useState({ q: '', category: '', location: '', from: '', to: '' });
   const [message, setMessage] = useState('');
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [editingItem, setEditingItem] = useState(false);
+  const [editForm, setEditForm] = useState({});
 
   async function loadItems() {
     try {
@@ -68,6 +71,50 @@ export default function App() {
       if (!response.ok) throw new Error(data.message || 'Could not post this item.');
       setItemForm(emptyItem); setMessage('Your listing is posted.'); await loadItems();
     } catch (error) { setMessage(error.message); }
+  }
+
+  async function showDetails(item) {
+    setMessage('');
+    setEditingItem(false);
+    try {
+      const response = await fetch(`${API}/items/${item._id}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not load listing details.');
+      setSelectedItem(data.item);
+    } catch (error) { setMessage(error.message); }
+  }
+
+  function startEditing() {
+    setEditForm({ title: selectedItem.title, description: selectedItem.description, category: selectedItem.category, location: selectedItem.location, type: selectedItem.type });
+    setEditingItem(true);
+  }
+
+  async function saveItem(event) {
+    event.preventDefault(); setMessage('');
+    try {
+      const response = await fetch(`${API}/items/${selectedItem._id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(editForm) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not update this listing.');
+      setSelectedItem(data.item); setEditingItem(false); setMessage('Your listing was updated.'); await loadItems();
+    } catch (error) { setMessage(error.message); }
+  }
+
+  async function deleteItem() {
+    if (!window.confirm('Delete this listing? This cannot be undone.')) return;
+    setMessage('');
+    try {
+      const response = await fetch(`${API}/items/${selectedItem._id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Could not delete this listing.');
+      }
+      setSelectedItem(null); setMessage('Your listing was deleted.'); await loadItems();
+    } catch (error) { setMessage(error.message); }
+  }
+
+  function isItemOwner(item) {
+    const ownerId = item?.owner?._id || item?.owner?.id || item?.owner;
+    return Boolean(user?.id && ownerId && String(ownerId) === String(user.id));
   }
 
   function signOut() {
@@ -126,9 +173,27 @@ export default function App() {
                 {(Object.values(searchFields).some(Boolean) || filter !== 'all') && <button className="clear-filters" onClick={() => { setSearchFields({ q: '', category: '', location: '', from: '', to: '' }); setFilter('all'); }}>Clear filters</button>}
               </div>
               <div className="board-summary"><span className="summary-bubble">✦</span><span>{items.length ? `${items.length} matching campus ${items.length === 1 ? 'listing' : 'listings'}` : 'Your community board is ready'}</span><span className="summary-arrow">↗</span></div>
-              <div className="listing-list">{items.length ? items.map((item) => <article className="listing-card" key={item._id}><div className={`listing-type ${item.type}`}>{item.type === 'lost' ? 'Looking for' : 'Found on campus'}</div><h3>{item.title}</h3><p>{item.description}</p><div className="listing-meta"><span>◈ &nbsp;{item.category}</span><span>⌖ &nbsp;{item.location}</span></div><small>Shared by {item.owner?.name || 'Campus member'}</small></article>) : <div className="empty-state"><span aria-hidden="true">⌕</span><h3>{Object.values(searchFields).some(Boolean) || filter !== 'all' ? 'No matching listings' : 'It starts with our community'}</h3><p>{Object.values(searchFields).some(Boolean) || filter !== 'all' ? 'Try changing or clearing a few filters.' : 'Lost or found something? Add the first post and help it find its way home.'}</p></div>}</div>
+              <div className="listing-list">{items.length ? items.map((item) => <article className="listing-card" key={item._id}><div className={`listing-type ${item.type}`}>{item.type === 'lost' ? 'Looking for' : 'Found on campus'}</div><h3>{item.title}</h3><p>{item.description}</p><div className="listing-meta"><span>◈ &nbsp;{item.category}</span><span>⌖ &nbsp;{item.location}</span></div><div className="listing-card-footer"><small>Shared by {item.owner?.name || 'Campus member'}</small><button className="details-link" type="button" onClick={() => showDetails(item)}>View details <span aria-hidden="true">→</span></button></div></article>) : <div className="empty-state"><span aria-hidden="true">⌕</span><h3>{Object.values(searchFields).some(Boolean) || filter !== 'all' ? 'No matching listings' : 'It starts with our community'}</h3><p>{Object.values(searchFields).some(Boolean) || filter !== 'all' ? 'Try changing or clearing a few filters.' : 'Lost or found something? Add the first post and help it find its way home.'}</p></div>}</div>
             </section>
           </div>
+          {selectedItem && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedItem(null); }}>
+            <section className="item-dialog" role="dialog" aria-modal="true" aria-labelledby="item-dialog-title">
+              <div className="dialog-heading"><div><span className={`listing-type ${selectedItem.type}`}>{selectedItem.type === 'lost' ? 'Looking for' : 'Found on campus'}</span><p className="dialog-kicker">CAMPUS LISTING</p></div><button className="dialog-close" type="button" aria-label="Close details" onClick={() => setSelectedItem(null)}>×</button></div>
+              {editingItem ? <form className="form-stack edit-form" onSubmit={saveItem}>
+                <label>Item name<input required maxLength="100" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} /></label>
+                <label>Type<select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}><option value="lost">Lost</option><option value="found">Found</option></select></label>
+                <label>Category<select value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>{['Electronics', 'Books', 'Clothing', 'Accessories', 'Other'].map((category) => <option key={category}>{category}</option>)}</select></label>
+                <label>Location<input required maxLength="120" value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} /></label>
+                <label>Description<textarea required maxLength="1000" rows="4" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} /></label>
+                <div className="dialog-actions"><button className="button button-secondary" type="button" onClick={() => setEditingItem(false)}>Cancel</button><button className="button button-primary" type="submit">Save changes</button></div>
+              </form> : <>
+                <h2 id="item-dialog-title" className="item-dialog-title">{selectedItem.title}</h2>
+                <p className="item-dialog-description">{selectedItem.description}</p>
+                <div className="item-detail-grid"><div><span>Category</span><strong>{selectedItem.category}</strong></div><div><span>Location</span><strong>{selectedItem.location}</strong></div><div><span>Posted by</span><strong>{selectedItem.owner?.name || 'Campus member'}</strong></div><div><span>Date posted</span><strong>{selectedItem.createdAt ? new Date(selectedItem.createdAt).toLocaleDateString() : 'Recently'}</strong></div></div>
+                {isItemOwner(selectedItem) && <div className="dialog-actions owner-actions"><button className="button button-secondary" type="button" onClick={deleteItem}>Delete listing</button><button className="button button-primary" type="button" onClick={startEditing}>Edit listing</button></div>}
+              </>}
+            </section>
+          </div>}
           <footer>Made with care for the JIIT campus community <span aria-hidden="true">♥</span></footer>
         </div>
       </div>

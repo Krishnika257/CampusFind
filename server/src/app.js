@@ -79,6 +79,14 @@ export function createApp({ User = defaultUser, Item = defaultItem, jwtSecret = 
     } catch (error) { return next(error); }
   });
 
+  app.get('/api/items/:id', async (request, response, next) => {
+    try {
+      const item = await Item.findById(request.params.id).populate('owner', 'name');
+      if (!item) return response.status(404).json({ message: 'Listing not found.' });
+      return response.json({ item });
+    } catch (error) { return next(error); }
+  });
+
   app.post('/api/items', requireAuth, async (request, response, next) => {
     try {
       const { title, description, category, location, type } = request.body;
@@ -87,7 +95,34 @@ export function createApp({ User = defaultUser, Item = defaultItem, jwtSecret = 
     } catch (error) { return next(error); }
   });
 
+  app.patch('/api/items/:id', requireAuth, async (request, response, next) => {
+    try {
+      const item = await Item.findById(request.params.id);
+      if (!item) return response.status(404).json({ message: 'Listing not found.' });
+      if (item.owner?.toString() !== request.userId) return response.status(403).json({ message: 'You can only edit your own listings.' });
+      const updates = {};
+      for (const field of ['title', 'description', 'category', 'location', 'type']) {
+        if (Object.hasOwn(request.body, field)) updates[field] = request.body[field];
+      }
+      if (!Object.keys(updates).length) return response.status(400).json({ message: 'Provide at least one listing field to update.' });
+      Object.assign(item, updates);
+      await item.save();
+      return response.json({ item });
+    } catch (error) { return next(error); }
+  });
+
+  app.delete('/api/items/:id', requireAuth, async (request, response, next) => {
+    try {
+      const item = await Item.findById(request.params.id);
+      if (!item) return response.status(404).json({ message: 'Listing not found.' });
+      if (item.owner?.toString() !== request.userId) return response.status(403).json({ message: 'You can only delete your own listings.' });
+      await item.deleteOne();
+      return response.status(204).end();
+    } catch (error) { return next(error); }
+  });
+
   app.use((error, _request, response, _next) => {
+    if (error?.name === 'CastError') return response.status(404).json({ message: 'Listing not found.' });
     if (error?.name === 'ValidationError') return response.status(400).json({ message: 'Please check the item details and try again.' });
     if (error?.code === 11000) return response.status(409).json({ message: 'That email is already registered.' });
     console.error(error);
