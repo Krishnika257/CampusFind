@@ -173,7 +173,7 @@ export default function App() {
 
           <section className="hero compact-hero" aria-labelledby="hero-title">
             <div><p className="eyebrow">YOUR CAMPUS COMMUNITY</p><h1 id="hero-title">Good things <span>find their way back.</span></h1><p className="intro">Lost something between classes? Found something on campus? Let’s reconnect it with its person.</p></div>
-            <div className="hero-art" aria-hidden="true"><span className="art-spark">✦</span><div className="art-tile tile-yellow">⌕</div><div className="art-tile tile-pink">↗</div><div className="art-tile tile-blue">✳</div><div className="art-loop" /></div>
+            <div className="hero-art"><img src="/lost-found-illustration-transparent.png" alt="A box holding books and an umbrella, labeled Lost & Found" /></div>
           </section>
           {message && <p className="notice" role="status">{message}</p>}
 
