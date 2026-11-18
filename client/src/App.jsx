@@ -22,11 +22,15 @@ export default function App() {
   const [itemForm, setItemForm] = useState(emptyItem);
   const [items, setItems] = useState([]);
   const [filter, setFilter] = useState('all');
+  const [searchFields, setSearchFields] = useState({ q: '', category: '', location: '', from: '', to: '' });
   const [message, setMessage] = useState('');
 
   async function loadItems() {
     try {
-      const query = filter === 'all' ? '' : `?type=${filter}`;
+      const params = new URLSearchParams();
+      if (filter !== 'all') params.set('type', filter);
+      Object.entries(searchFields).forEach(([key, value]) => { if (value.trim()) params.set(key, value.trim()); });
+      const query = params.size ? `?${params.toString()}` : '';
       const response = await fetch(`${API}/items${query}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not load listings.');
@@ -34,7 +38,10 @@ export default function App() {
     } catch (error) { setMessage(error.message); }
   }
 
-  useEffect(() => { loadItems(); }, [filter]);
+  useEffect(() => {
+    const timer = setTimeout(loadItems, 250);
+    return () => clearTimeout(timer);
+  }, [filter, searchFields]);
 
   async function submitAuth(event) {
     event.preventDefault(); setMessage('');
@@ -104,8 +111,16 @@ export default function App() {
 
             <section className="panel listings-panel" id="updates">
               <div className="panel-heading"><div><p className="eyebrow">HAPPENING AROUND JIIT</p><h2>Campus board</h2></div><select className="filter-select" aria-label="Filter listings" value={filter} onChange={(e) => setFilter(e.target.value)}><option value="all">All items</option><option value="lost">Lost</option><option value="found">Found</option></select></div>
-              <div className="board-summary"><span className="summary-bubble">✦</span><span>{items.length ? `${items.length} open campus ${items.length === 1 ? 'listing' : 'listings'}` : 'Your community board is ready'}</span><span className="summary-arrow">↗</span></div>
-              <div className="listing-list">{items.length ? items.map((item) => <article className="listing-card" key={item._id}><div className={`listing-type ${item.type}`}>{item.type === 'lost' ? 'Looking for' : 'Found on campus'}</div><h3>{item.title}</h3><p>{item.description}</p><div className="listing-meta"><span>◈ &nbsp;{item.category}</span><span>⌖ &nbsp;{item.location}</span></div><small>Shared by {item.owner?.name || 'Campus member'}</small></article>) : <div className="empty-state"><span aria-hidden="true">⌕</span><h3>It starts with our community</h3><p>Lost or found something? Add the first post and help it find its way home.</p></div>}</div>
+              <div className="search-toolbar">
+                <label className="search-box"><span aria-hidden="true">⌕</span><input aria-label="Search items" placeholder="Search items or details" value={searchFields.q} onChange={(e) => setSearchFields({ ...searchFields, q: e.target.value })} /></label>
+                <select className="filter-select" aria-label="Filter by category" value={searchFields.category} onChange={(e) => setSearchFields({ ...searchFields, category: e.target.value })}><option value="">All categories</option>{['Electronics', 'Books', 'Clothing', 'Accessories', 'Other'].map((category) => <option key={category}>{category}</option>)}</select>
+                <input className="location-filter" aria-label="Filter by location" placeholder="Campus location" value={searchFields.location} onChange={(e) => setSearchFields({ ...searchFields, location: e.target.value })} />
+                <label className="date-filter"><span>From</span><input aria-label="From date" type="date" value={searchFields.from} onChange={(e) => setSearchFields({ ...searchFields, from: e.target.value })} /></label>
+                <label className="date-filter"><span>To</span><input aria-label="To date" type="date" value={searchFields.to} onChange={(e) => setSearchFields({ ...searchFields, to: e.target.value })} /></label>
+                {(Object.values(searchFields).some(Boolean) || filter !== 'all') && <button className="clear-filters" onClick={() => { setSearchFields({ q: '', category: '', location: '', from: '', to: '' }); setFilter('all'); }}>Clear filters</button>}
+              </div>
+              <div className="board-summary"><span className="summary-bubble">✦</span><span>{items.length ? `${items.length} matching campus ${items.length === 1 ? 'listing' : 'listings'}` : 'Your community board is ready'}</span><span className="summary-arrow">↗</span></div>
+              <div className="listing-list">{items.length ? items.map((item) => <article className="listing-card" key={item._id}><div className={`listing-type ${item.type}`}>{item.type === 'lost' ? 'Looking for' : 'Found on campus'}</div><h3>{item.title}</h3><p>{item.description}</p><div className="listing-meta"><span>◈ &nbsp;{item.category}</span><span>⌖ &nbsp;{item.location}</span></div><small>Shared by {item.owner?.name || 'Campus member'}</small></article>) : <div className="empty-state"><span aria-hidden="true">⌕</span><h3>{Object.values(searchFields).some(Boolean) || filter !== 'all' ? 'No matching listings' : 'It starts with our community'}</h3><p>{Object.values(searchFields).some(Boolean) || filter !== 'all' ? 'Try changing or clearing a few filters.' : 'Lost or found something? Add the first post and help it find its way home.'}</p></div>}</div>
             </section>
           </div>
           <footer>Made with care for the JIIT campus community <span aria-hidden="true">♥</span></footer>
