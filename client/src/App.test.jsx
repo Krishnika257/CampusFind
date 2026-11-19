@@ -126,7 +126,7 @@ describe('CampusFind board', () => {
     const notification = { _id: 'notice-1', type: 'match', title: 'Possible item match', message: 'A found listing may match your item.', isRead: false };
     const fetchMock = vi.fn().mockImplementation(async (url, options = {}) => {
       if (String(url).endsWith('/notifications/notice-1/read')) return { ok: true, json: async () => ({ notification: { ...notification, isRead: true } }) };
-      if (String(url).endsWith('/notifications')) return { ok: true, json: async () => ({ notifications: [notification] }) };
+      if (String(url).endsWith('/notifications')) return { ok: true, json: async () => ({ notifications: [notification], unreadCount: 1 }) };
       return { ok: true, json: async () => ({ items: [] }) };
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -149,7 +149,7 @@ describe('CampusFind board', () => {
     const fetchMock = vi.fn().mockImplementation(async (url) => {
       const path = String(url);
       if (path.endsWith('/notifications/notice-message-1/read')) return { ok: true, json: async () => ({ notification: { ...notification, isRead: true } }) };
-      if (path.endsWith('/notifications')) return { ok: true, json: async () => ({ notifications: [notification] }) };
+      if (path.endsWith('/notifications')) return { ok: true, json: async () => ({ notifications: [notification], unreadCount: 1 }) };
       if (path.endsWith('/conversations/conversation-1/messages')) return { ok: true, json: async () => ({ messages: [] }) };
       if (path.endsWith('/conversations')) return { ok: true, json: async () => ({ conversations: [conversation] }) };
       return { ok: true, json: async () => ({ items: [] }) };
@@ -163,6 +163,37 @@ describe('CampusFind board', () => {
 
     expect(await screen.findByRole('textbox', { name: 'Write a message' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Blue bottle' })).toBeInTheDocument();
+  });
+
+  it('opens paginated notification history and filters unread alerts', async () => {
+    localStorage.setItem('campusfind-user', JSON.stringify({ id: 'student-1', name: 'Riley', role: 'student' }));
+    localStorage.setItem('campusfind-token', 'student-token');
+    const latest = { _id: 'notice-new', type: 'match', title: 'Latest match', message: 'A likely match was found.', isRead: false };
+    const read = { _id: 'notice-read', type: 'claim-approved', title: 'Claim approved', message: 'Your claim was approved.', isRead: true };
+    const fetchMock = vi.fn().mockImplementation(async (url) => {
+      const parsed = new URL(String(url), 'http://localhost');
+      if (parsed.pathname.endsWith('/notifications') && parsed.searchParams.has('page')) {
+        const page = Number(parsed.searchParams.get('page'));
+        if (parsed.searchParams.get('unread') === 'true') return { ok: true, json: async () => ({ notifications: [latest], unreadCount: 1, pagination: { page: 1, pages: 1, total: 1, limit: 20 } }) };
+        if (page === 2) return { ok: true, json: async () => ({ notifications: [{ _id: 'notice-old', title: 'Older notification', message: 'An older update.', type: 'message', isRead: true }], unreadCount: 1, pagination: { page: 2, pages: 2, total: 21, limit: 20 } }) };
+        return { ok: true, json: async () => ({ notifications: [latest, read], unreadCount: 1, pagination: { page: 1, pages: 2, total: 21, limit: 20 } }) };
+      }
+      if (parsed.pathname.endsWith('/notifications')) return { ok: true, json: async () => ({ notifications: [latest, read], unreadCount: 1 }) };
+      return { ok: true, json: async () => ({ items: [] }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+    const popover = await screen.findByRole('region', { name: 'Notifications' });
+    fireEvent.click(within(popover).getByRole('button', { name: /View notification history/ }));
+    expect(await screen.findByRole('heading', { name: 'Notification history' })).toBeInTheDocument();
+    expect(await screen.findByText('Latest match')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(await screen.findByText('Older notification')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Unread/ }));
+    expect(await screen.findByText('Latest match')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('unread=true'), expect.any(Object));
   });
 
   it('lets the listing owner edit details', async () => {

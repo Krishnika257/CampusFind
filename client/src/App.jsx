@@ -39,7 +39,14 @@ export default function App() {
   const [messageDraft, setMessageDraft] = useState('');
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showNotificationHistory, setShowNotificationHistory] = useState(false);
+  const [notificationHistory, setNotificationHistory] = useState([]);
+  const [historyPagination, setHistoryPagination] = useState({ page: 1, pages: 0, total: 0 });
+  const [historyFilter, setHistoryFilter] = useState('all');
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
   const [adminStats, setAdminStats] = useState(null);
 
   async function loadItems() {
@@ -65,7 +72,10 @@ export default function App() {
   }, [user?.role, token]);
 
   useEffect(() => {
-    if (!user || !token) { setNotifications([]); setAdminStats(null); return undefined; }
+    if (!user || !token) {
+      setNotifications([]); setNotificationHistory([]); setNotificationUnreadCount(0); setAdminStats(null); setShowNotificationHistory(false);
+      return undefined;
+    }
     const refreshAccountData = () => {
       loadNotifications();
       if (user.role === 'admin') loadAdminStats();
@@ -197,8 +207,34 @@ export default function App() {
     try {
       const response = await fetch(`${API}/notifications`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await response.json();
-      if (response.ok) setNotifications(data.notifications || []);
+      if (response.ok) {
+        setNotifications(data.notifications || []);
+        setNotificationUnreadCount(data.unreadCount || 0);
+      }
     } catch { /* The board remains usable if notification refresh is temporarily unavailable. */ }
+  }
+
+  async function loadNotificationHistory(page = 1, filter = historyFilter) {
+    setHistoryLoading(true);
+    setHistoryError('');
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: '20' });
+      if (filter === 'unread') params.set('unread', 'true');
+      const response = await fetch(`${API}/notifications?${params}`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not load notification history.');
+      setNotificationHistory(data.notifications || []);
+      setHistoryPagination(data.pagination || { page, pages: 1, total: (data.notifications || []).length });
+      setNotificationUnreadCount(data.unreadCount || 0);
+    } catch (error) { setHistoryError(error.message); }
+    finally { setHistoryLoading(false); }
+  }
+
+  async function openNotificationHistory() {
+    setShowNotifications(false);
+    setHistoryFilter('all');
+    setShowNotificationHistory(true);
+    await loadNotificationHistory(1, 'all');
   }
 
   async function loadAdminStats() {
@@ -214,10 +250,15 @@ export default function App() {
     if (!notification.isRead) {
       try {
         const response = await fetch(`${API}/notifications/${notification._id || notification.id}/read`, { method: 'PATCH', headers: { Authorization: `Bearer ${token}` } });
-        if (response.ok) setNotifications((current) => current.map((entry) => (entry._id || entry.id) === (notification._id || notification.id) ? { ...entry, isRead: true } : entry));
+        if (response.ok) {
+          setNotifications((current) => current.map((entry) => (entry._id || entry.id) === (notification._id || notification.id) ? { ...entry, isRead: true } : entry));
+          setNotificationHistory((current) => current.map((entry) => (entry._id || entry.id) === (notification._id || notification.id) ? { ...entry, isRead: true } : entry));
+          setNotificationUnreadCount((count) => Math.max(0, count - 1));
+        }
       } catch { /* Keep the notification available if marking it read fails. */ }
     }
     setShowNotifications(false);
+    setShowNotificationHistory(false);
     if (notification.conversation) {
       const conversationId = notification.conversation._id || notification.conversation;
       const latestConversations = await loadConversations();
@@ -233,6 +274,9 @@ export default function App() {
       const response = await fetch(`${API}/notifications/read-all`, { method: 'PATCH', headers: { Authorization: `Bearer ${token}` } });
       if (!response.ok) return;
       setNotifications((current) => current.map((entry) => ({ ...entry, isRead: true })));
+      setNotificationHistory((current) => current.map((entry) => ({ ...entry, isRead: true })));
+      setNotificationUnreadCount(0);
+      if (historyFilter === 'unread') await loadNotificationHistory(1, 'unread');
     } catch { /* Ignore a temporary notification service outage. */ }
   }
 
@@ -323,7 +367,7 @@ export default function App() {
         <div className="dashboard-content">
           <header className="topbar">
             <a className="brand" href="/" aria-label="CampusFind home"><span className="brand-mark"><CampusFindMark /></span><span>Campus<span className="brand-accent">Find</span></span></a>
-            <div className="account-area"><span className="campus-chip"><span className="campus-dot" /> JIIT · NOIDA CAMPUS</span>{user && <div className="notification-area"><button className="notification-toggle" type="button" aria-label={`Notifications, ${notifications.filter((entry) => !entry.isRead).length} unread`} aria-expanded={showNotifications} onClick={() => setShowNotifications((visible) => !visible)}><span aria-hidden="true">🔔</span>{notifications.some((entry) => !entry.isRead) && <i aria-hidden="true" />}</button>{showNotifications && <section className="notification-popover" aria-label="Notifications"><div className="notification-popover-heading"><strong>Notifications</strong>{notifications.some((entry) => !entry.isRead) && <button type="button" onClick={markAllNotificationsRead}>Mark all read</button>}</div>{notifications.length ? notifications.slice(0, 8).map((notification) => <button className={`notification-row ${notification.isRead ? '' : 'unread'}`} type="button" key={notification._id || notification.id} onClick={() => openNotification(notification)}><span className="notification-symbol" aria-hidden="true">{notification.type === 'match' ? '⌕' : notification.type === 'message' ? '✉' : '✓'}</span><span><strong>{notification.title}</strong><small>{notification.message}</small></span></button>) : <p className="notification-empty">You’re all caught up.</p>}</section>}</div>}<button className="theme-toggle" type="button" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span></button>{user ? <><span className="welcome">Hi, {user.name}</span><button className="text-button" onClick={signOut}>Sign out</button></> : <span className="campus-label">Welcome to your campus board</span>}</div>
+            <div className="account-area"><span className="campus-chip"><span className="campus-dot" /> JIIT · NOIDA CAMPUS</span>{user && <div className="notification-area"><button className="notification-toggle" type="button" aria-label={`Notifications, ${notificationUnreadCount} unread`} aria-expanded={showNotifications} onClick={() => setShowNotifications((visible) => !visible)}><span aria-hidden="true">🔔</span>{notificationUnreadCount > 0 && <i aria-hidden="true" />}</button>{showNotifications && <section className="notification-popover" aria-label="Notifications"><div className="notification-popover-heading"><strong>Notifications</strong>{notificationUnreadCount > 0 && <button type="button" onClick={markAllNotificationsRead}>Mark all read</button>}</div>{notifications.length ? notifications.slice(0, 8).map((notification) => <button className={`notification-row ${notification.isRead ? '' : 'unread'}`} type="button" key={notification._id || notification.id} onClick={() => openNotification(notification)}><span className="notification-symbol" aria-hidden="true">{notification.type === 'match' ? '⌕' : notification.type === 'message' ? '✉' : '✓'}</span><span><strong>{notification.title}</strong><small>{notification.message}</small></span></button>) : <p className="notification-empty">You’re all caught up.</p>}<button className="notification-history-link" type="button" onClick={openNotificationHistory}>View notification history <span aria-hidden="true">→</span></button></section>}</div>}<button className="theme-toggle" type="button" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span></button>{user ? <><span className="welcome">Hi, {user.name}</span><button className="text-button" onClick={signOut}>Sign out</button></> : <span className="campus-label">Welcome to your campus board</span>}</div>
           </header>
 
           <section className="hero compact-hero" aria-labelledby="hero-title">
@@ -332,6 +376,7 @@ export default function App() {
           </section>
           {message && <p className="notice" role="status">{message}</p>}
 
+          <div className={showNotificationHistory ? 'dashboard-main-view is-hidden' : 'dashboard-main-view'}>
           <div className="content-grid" id="board">
             <section className="panel post-panel" id="post">
               <div className="panel-heading"><div><p className="eyebrow">QUICK ACTION</p><h2>{user ? 'Post an item' : mode === 'login' ? 'Welcome back' : 'Create your account'}</h2></div><span className="panel-icon">✎</span></div>
@@ -392,6 +437,17 @@ export default function App() {
             {conversations.length ? <div className="conversation-list">{conversations.map((conversation) => <button className="conversation-row" key={conversation._id || conversation.id} type="button" onClick={() => openConversation(conversation)}>
               <span className="conversation-avatar">{otherParticipantName(conversation)[0]?.toUpperCase() || 'C'}</span><span className="conversation-copy"><strong>{conversation.item?.title || 'Campus item'}</strong><small>Chat with {otherParticipantName(conversation)}</small><span>{conversation.lastMessage || 'Start the conversation'}</span></span><span className="conversation-arrow" aria-hidden="true">→</span>
             </button>)}</div> : <div className="empty-state messages-empty"><span aria-hidden="true">✉</span><h3>No conversations yet</h3><p>Open a listing and choose “Message poster” to privately contact its owner.</p></div>}
+          </section>}
+          </div>
+          {showNotificationHistory && user && <section className="panel notification-history-page" aria-labelledby="notification-history-title">
+            <button className="history-back-button" type="button" onClick={() => setShowNotificationHistory(false)}>← Back to campus board</button>
+            <div className="notification-history-heading"><div><p className="eyebrow">YOUR UPDATES</p><h2 id="notification-history-title">Notification history</h2><p>All your match, claim, and message updates in one place.</p></div><button className="button button-secondary" type="button" disabled={notificationUnreadCount === 0} onClick={markAllNotificationsRead}>Mark all read</button></div>
+            <div className="notification-history-toolbar"><div className="history-filter-tabs" role="group" aria-label="Filter notification history"><button type="button" className={historyFilter === 'all' ? 'selected' : ''} onClick={() => { setHistoryFilter('all'); loadNotificationHistory(1, 'all'); }}>All</button><button type="button" className={historyFilter === 'unread' ? 'selected' : ''} onClick={() => { setHistoryFilter('unread'); loadNotificationHistory(1, 'unread'); }}>Unread <span>{notificationUnreadCount}</span></button></div><small>{historyPagination.total} notification{historyPagination.total === 1 ? '' : 's'}</small></div>
+            {historyError && <p className="notice" role="alert">{historyError}</p>}
+            {historyLoading ? <p className="history-loading">Loading notifications…</p> : notificationHistory.length ? <div className="notification-history-list">{notificationHistory.map((notification) => <button className={`history-notification ${notification.isRead ? '' : 'unread'}`} type="button" key={notification._id || notification.id} onClick={() => openNotification(notification)}>
+              <span className="history-notification-icon" aria-hidden="true">{notification.type === 'match' ? '⌕' : notification.type === 'message' ? '✉' : '✓'}</span><span className="history-notification-copy"><span className="history-notification-title"><strong>{notification.title}</strong>{!notification.isRead && <i>New</i>}</span><span>{notification.message}</span><small>{notification.createdAt ? new Date(notification.createdAt).toLocaleString() : 'Recently'}</small></span><span className="history-notification-arrow" aria-hidden="true">→</span>
+            </button>)}</div> : <div className="empty-state history-empty"><span aria-hidden="true">✓</span><h3>{historyFilter === 'unread' ? 'No unread notifications' : 'No notifications yet'}</h3><p>{historyFilter === 'unread' ? 'You’re all caught up.' : 'Match, claim, and message updates will appear here.'}</p></div>}
+            {historyPagination.pages > 1 && <div className="history-pagination"><button className="button button-secondary" type="button" disabled={historyLoading || historyPagination.page <= 1} onClick={() => loadNotificationHistory(historyPagination.page - 1)}>Previous</button><span>Page {historyPagination.page} of {historyPagination.pages}</span><button className="button button-secondary" type="button" disabled={historyLoading || historyPagination.page >= historyPagination.pages} onClick={() => loadNotificationHistory(historyPagination.page + 1)}>Next</button></div>}
           </section>}
           {selectedItem && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedItem(null); }}>
             <section className="item-dialog" role="dialog" aria-modal="true" aria-labelledby="item-dialog-title">

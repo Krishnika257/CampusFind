@@ -63,12 +63,23 @@ function createModels() {
   };
   const notificationModel = {
     async create(fields) {
-      const notification = { id: `notification-${notifications.length + 1}`, isRead: false, ...fields, async save() { return this; } };
+      const notification = { id: `notification-${notifications.length + 1}`, isRead: false, createdAt: new Date(Date.now() + notifications.length), ...fields, async save() { return this; } };
       notifications.push(notification);
       return notification;
     },
-    find(filter) { return { sort() { return this; }, limit() { return this; }, async populate() { return notifications.filter((entry) => entry.user === filter.user); } }; },
+    find(filter) {
+      let results = [];
+      let offset = 0;
+      let pageSize = 50;
+      return {
+        sort() { results = notifications.filter((entry) => Object.entries(filter).every(([key, value]) => entry[key] === value)).sort((a, b) => b.createdAt - a.createdAt); return this; },
+        skip(value) { offset = value; return this; },
+        limit(value) { pageSize = value; return this; },
+        async populate() { return results.slice(offset, offset + pageSize); },
+      };
+    },
     async findById(id) { return notifications.find((entry) => entry.id === id) || null; },
+    async countDocuments(filter) { return notifications.filter((entry) => Object.entries(filter).every(([key, value]) => entry[key] === value)).length; },
     async updateMany(filter) {
       const unread = notifications.filter((entry) => entry.user === filter.user && entry.isRead === filter.isRead);
       unread.forEach((entry) => { entry.isRead = true; });
@@ -218,6 +229,21 @@ describe('CampusFind API', () => {
     expect(forbidden.status).toBe(403);
     expect(read.status).toBe(200);
     expect(read.body.notification.isRead).toBe(true);
+  });
+
+  it('paginates notification history and can filter to unread notifications', async () => {
+    await models.Notification.create({ user: 'user-1', type: 'match', title: 'Older alert', message: 'An older match.' });
+    await models.Notification.create({ user: 'user-1', type: 'message', title: 'Newer alert', message: 'A newer message.' });
+    const read = await models.Notification.create({ user: 'user-1', type: 'claim-approved', title: 'Read alert', message: 'Already read.' });
+    read.isRead = true;
+    await models.Notification.create({ user: 'user-2', type: 'match', title: 'Private alert', message: 'Another user’s alert.' });
+    const token = jwt.sign({}, secret, { subject: 'user-1', expiresIn: '1h' });
+
+    const secondPage = await request(app).get('/api/notifications').query({ page: 2, limit: 1, unread: 'true' }).set('Authorization', `Bearer ${token}`);
+    expect(secondPage.status).toBe(200);
+    expect(secondPage.body.notifications[0].title).toBe('Older alert');
+    expect(secondPage.body.pagination).toMatchObject({ page: 2, limit: 1, total: 2, pages: 2 });
+    expect(secondPage.body.unreadCount).toBe(2);
   });
 
   it('restricts dashboard statistics to admins and reports project counts', async () => {

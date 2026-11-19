@@ -244,11 +244,21 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
 
   app.get('/api/notifications', requireAuth, async (request, response, next) => {
     try {
-      const notifications = await Notification.find({ user: request.userId }).sort({ createdAt: -1 }).limit(50).populate([
+      const requestedPage = Number.parseInt(request.query.page, 10);
+      const requestedLimit = Number.parseInt(request.query.limit, 10);
+      const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+      const limit = Number.isInteger(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, 50) : 50;
+      const filter = { user: request.userId };
+      if (request.query.unread === 'true') filter.isRead = false;
+      const [notifications, total, unreadCount] = await Promise.all([
+        Notification.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).populate([
         { path: 'item', select: 'title type status' },
         { path: 'conversation', select: 'item participants', populate: [{ path: 'item', select: 'title' }, { path: 'participants', select: 'name' }] },
+        ]),
+        Notification.countDocuments(filter),
+        Notification.countDocuments({ user: request.userId, isRead: false }),
       ]);
-      return response.json({ notifications });
+      return response.json({ notifications, unreadCount, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
     } catch (error) { return next(error); }
   });
 
