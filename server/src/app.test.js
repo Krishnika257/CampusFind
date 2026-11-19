@@ -115,6 +115,24 @@ describe('CampusFind API', () => {
     expect(response.body.item.title).toBe('Blue bottle');
   });
 
+  it('returns ranked open listings of the opposite type as match suggestions', async () => {
+    const source = { id: 'lost-1', type: 'lost', title: 'Blue Samsung phone', description: 'Has a cracked case', category: 'Electronics', location: 'Central Library' };
+    const candidate = { id: 'found-1', type: 'found', title: 'Samsung phone with blue case', description: 'Found by library steps', category: 'Electronics', location: 'Library entrance' };
+    models.Item.findById = vi.fn().mockResolvedValue(source);
+    models.Item.find = vi.fn((filter) => ({
+      sort() { return this; },
+      limit() { return this; },
+      async populate() { this.filter = filter; return [candidate]; },
+    }));
+
+    const response = await request(app).get('/api/items/lost-1/matches');
+
+    expect(response.status).toBe(200);
+    expect(models.Item.find).toHaveBeenCalledWith({ status: 'open', type: 'found', _id: { $ne: 'lost-1' } });
+    expect(response.body.matches[0]).toMatchObject({ item: { title: candidate.title }, score: expect.any(Number) });
+    expect(response.body.matches[0].reasons).toContain('Same category');
+  });
+
   it('only allows the owner to edit a listing', async () => {
     const item = { id: 'item-1', owner: { toString: () => 'user-7' }, title: 'Old title', async save() { return this; } };
     models.Item.findById = vi.fn().mockResolvedValue(item);

@@ -75,6 +75,24 @@ describe('CampusFind board', () => {
     expect(within(dialog).queryByRole('button', { name: 'Edit listing' })).not.toBeInTheDocument();
   });
 
+  it('shows ranked match suggestions in listing details', async () => {
+    const listedItem = { _id: 'lost-1', title: 'Blue phone', description: 'Cracked case', category: 'Electronics', location: 'Library', type: 'lost', owner: { _id: 'owner-1', name: 'Riley' } };
+    const match = { item: { _id: 'found-1', title: 'Phone with blue case', category: 'Electronics', location: 'Library entrance', type: 'found' }, score: 84, reasons: ['Same category', 'Similar campus location'] };
+    const fetchMock = vi.fn().mockImplementation(async (url) => {
+      if (String(url).endsWith('/matches')) return { ok: true, json: async () => ({ matches: [match] }) };
+      if (String(url).endsWith('/lost-1')) return { ok: true, json: async () => ({ item: listedItem }) };
+      return { ok: true, json: async () => ({ items: [listedItem] }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /View details/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByRole('heading', { name: 'Possible matches' })).toBeInTheDocument();
+    expect(await within(dialog).findByText('Phone with blue case')).toBeInTheDocument();
+    expect(within(dialog).getByText('84%')).toBeInTheDocument();
+  });
+
   it('lets the listing owner edit details', async () => {
     localStorage.setItem('campusfind-user', JSON.stringify({ id: 'owner-1', name: 'Riley' }));
     localStorage.setItem('campusfind-token', 'test-token');

@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import { Claim as defaultClaim, Item as defaultItem, User as defaultUser } from './models.js';
+import { rankMatches } from './matching.js';
 
 export function createApp({ User = defaultUser, Item = defaultItem, Claim = defaultClaim, jwtSecret = process.env.JWT_SECRET } = {}) {
   const app = express();
@@ -93,6 +94,19 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
       const item = await Item.findById(request.params.id).populate('owner', 'name');
       if (!item) return response.status(404).json({ message: 'Listing not found.' });
       return response.json({ item });
+    } catch (error) { return next(error); }
+  });
+
+  app.get('/api/items/:id/matches', async (request, response, next) => {
+    try {
+      const source = await Item.findById(request.params.id);
+      if (!source) return response.status(404).json({ message: 'Listing not found.' });
+      const oppositeType = source.type === 'lost' ? 'found' : 'lost';
+      const candidates = await Item.find({ status: 'open', type: oppositeType, _id: { $ne: source._id || source.id } })
+        .sort({ createdAt: -1 })
+        .limit(300)
+        .populate('owner', 'name');
+      return response.json({ matches: rankMatches(source, candidates) });
     } catch (error) { return next(error); }
   });
 

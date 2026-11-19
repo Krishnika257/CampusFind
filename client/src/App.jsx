@@ -31,6 +31,8 @@ export default function App() {
   const [claimProof, setClaimProof] = useState('');
   const [showClaimForm, setShowClaimForm] = useState(false);
   const [claims, setClaims] = useState([]);
+  const [matchedItems, setMatchedItems] = useState([]);
+  const [matchesLoading, setMatchesLoading] = useState(false);
 
   async function loadItems() {
     try {
@@ -88,6 +90,16 @@ export default function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not load listing details.');
       setSelectedItem(data.item);
+      setMatchedItems([]);
+      setMatchesLoading(true);
+      fetch(`${API}/items/${item._id}/matches`)
+        .then(async (matchResponse) => {
+          const matchData = await matchResponse.json();
+          if (!matchResponse.ok) throw new Error(matchData.message || 'Could not load match suggestions.');
+          setMatchedItems(matchData.matches || []);
+        })
+        .catch(() => setMatchedItems([]))
+        .finally(() => setMatchesLoading(false));
     } catch (error) { setMessage(error.message); }
   }
 
@@ -234,6 +246,12 @@ export default function App() {
                 <h2 id="item-dialog-title" className="item-dialog-title">{selectedItem.title}</h2>
                 <p className="item-dialog-description">{selectedItem.description}</p>
                 <div className="item-detail-grid"><div><span>Category</span><strong>{selectedItem.category}</strong></div><div><span>Location</span><strong>{selectedItem.location}</strong></div><div><span>Posted by</span><strong>{selectedItem.owner?.name || 'Campus member'}</strong></div><div><span>Date posted</span><strong>{selectedItem.createdAt ? new Date(selectedItem.createdAt).toLocaleDateString() : 'Recently'}</strong></div></div>
+                <section className="match-suggestions" aria-label="Possible matching listings">
+                  <div className="match-heading"><h3>Possible matches</h3><span>Opposite listing type</span></div>
+                  {matchesLoading ? <p className="match-empty">Looking for similar items…</p> : matchedItems.length ? <div className="match-list">{matchedItems.map(({ item, score, reasons }) => <article className="match-card" key={item._id}>
+                    <div><span className={`listing-type ${item.type}`}>{item.type === 'lost' ? 'Looking for' : 'Found on campus'}</span><h4>{item.title}</h4><p>{item.category} · {item.location}</p><small>{reasons.join(' · ')}</small></div><span className="match-score" title="Similarity score">{score}%</span>
+                  </article>)}</div> : <p className="match-empty">No close matches yet. We’ll show suggestions as similar listings are posted.</p>}
+                </section>
                 {user && selectedItem.type === 'found' && selectedItem.status === 'open' && !isItemOwner(selectedItem) && <div className="claim-action">
                   {showClaimForm ? <form className="form-stack" onSubmit={submitClaim}><label>Proof of ownership<textarea required minLength="20" maxLength="1000" rows="4" placeholder="Describe a detail only the owner would know" value={claimProof} onChange={(e) => setClaimProof(e.target.value)} /><small>Share specific details to help campus staff verify your claim.</small></label><div className="dialog-actions"><button className="button button-secondary" type="button" onClick={() => setShowClaimForm(false)}>Cancel</button><button className="button button-primary" type="submit">Send claim</button></div></form> : <button className="button button-primary claim-button" type="button" onClick={() => setShowClaimForm(true)}>This is mine — submit a claim</button>}
                 </div>}

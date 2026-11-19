@@ -417,6 +417,22 @@ html[data-theme="dark"] .button-primary:hover { background: #6966c8; }
 .item-detail-grid > div { display: grid; gap: 6px; padding: 13px; border: 1px solid #efedf4; border-radius: 10px; background: #faf9fd; }
 .item-detail-grid span { color: #8b899c; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; }
 .item-detail-grid strong { color: #393751; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+.match-suggestions { margin-top: 22px; padding-top: 18px; border-top: 1px solid #efedf4; }
+.match-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 11px; }
+.match-heading h3 { margin: 0; color: #34324f; font: 700 16px 'Manrope', sans-serif; }
+.match-heading > span { color: #88869a; font-size: 10px; }
+.match-list { display: grid; gap: 8px; }
+.match-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid #e8e6f0; border-radius: 11px; background: #faf9fd; }
+.match-card h4 { margin: 7px 0 3px; color: #393751; font: 700 14px 'Manrope', sans-serif; }
+.match-card p { margin: 0 0 4px; color: #6c6a80; font-size: 11px; }
+.match-card small { color: #88869a; font-size: 10px; }
+.match-score { display: grid; flex: 0 0 42px; width: 42px; height: 42px; place-items: center; border-radius: 50%; color: #31764c; background: #e3f3e8; font-size: 11px; font-weight: 800; }
+.match-empty { margin: 0; color: #858399; font-size: 12px; line-height: 1.6; }
+html[data-theme="dark"] .match-suggestions { border-color: #444353; }
+html[data-theme="dark"] .match-heading h3, html[data-theme="dark"] .match-card h4 { color: #efedf8; }
+html[data-theme="dark"] .match-heading > span, html[data-theme="dark"] .match-card p, html[data-theme="dark"] .match-card small, html[data-theme="dark"] .match-empty { color: #b8b6c8; }
+html[data-theme="dark"] .match-card { border-color: #454556; background: #292a37; }
+html[data-theme="dark"] .match-score { color: #aee4ba; background: #304a37; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 22px; }
 .dialog-actions .button { width: auto; min-height: 42px; font-size: 13px; }
 .button-secondary { border-color: #e4e1ed; color: #5e5c72; background: #fff; }
