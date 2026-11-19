@@ -383,8 +383,8 @@ export default function App() {
               {!user ? <>
                 <form className="form-stack" onSubmit={submitAuth}>
                   {mode === 'register' && <label>Your name<input required maxLength="80" autoComplete="name" value={authForm.name} onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })} /></label>}
-                  <label>College email<input required type="email" autoComplete="email" value={authForm.email} onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })} /></label>
-                  <label>Password<input required type="password" minLength="8" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={authForm.password} onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })} /><small>At least 8 characters</small></label>
+                  <label>College email<input required type="email" maxLength="254" autoComplete="email" value={authForm.email} onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })} /></label>
+                  <label>Password<input required type="password" minLength="8" maxLength="72" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={authForm.password} onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })} /><small>8 characters minimum; 72 bytes maximum</small></label>
                   <button className="button button-primary full-button" type="submit">{mode === 'login' ? 'Sign in' : 'Create account'} <span aria-hidden="true">→</span></button>
                 </form>
                 <p className="switch-mode">{mode === 'login' ? 'New to CampusFind?' : 'Already have an account?'} <button className="text-button" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>{mode === 'login' ? 'Create an account' : 'Sign in'}</button></p>
