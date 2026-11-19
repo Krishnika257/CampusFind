@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-const API = 'http://localhost:4000/api';
+const API = (import.meta.env.VITE_API_URL || 'http://localhost:4000/api').replace(/\/+$/, '');
 const emptyItem = { title: '', description: '', category: 'Other', location: '', type: 'lost' };
 
 function CampusFindMark() {
