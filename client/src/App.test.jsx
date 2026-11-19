@@ -93,6 +93,33 @@ describe('CampusFind board', () => {
     expect(within(dialog).getByText('84%')).toBeInTheDocument();
   });
 
+  it('lets a signed-in student start a private chat and send a message', async () => {
+    localStorage.setItem('campusfind-user', JSON.stringify({ id: 'student-1', name: 'Riley', role: 'student' }));
+    localStorage.setItem('campusfind-token', 'student-token');
+    const item = { _id: 'item-1', title: 'Blue bottle', description: 'Found near the library', category: 'Other', location: 'Library', type: 'found', status: 'open', owner: { _id: 'owner-1', name: 'Ari' } };
+    const conversation = { _id: 'conversation-1', item: { title: item.title }, participants: [{ _id: 'student-1', name: 'Riley' }, { _id: 'owner-1', name: 'Ari' }] };
+    const fetchMock = vi.fn().mockImplementation(async (url, options = {}) => {
+      const path = String(url);
+      if (path.endsWith('/items/item-1/conversations')) return { ok: true, json: async () => ({ conversation }) };
+      if (path.endsWith('/conversations/conversation-1/messages') && options.method === 'POST') return { ok: true, json: async () => ({ message: { _id: 'message-1', sender: 'student-1', text: JSON.parse(options.body).text } }) };
+      if (path.endsWith('/conversations/conversation-1/messages')) return { ok: true, json: async () => ({ messages: [] }) };
+      if (path.endsWith('/conversations')) return { ok: true, json: async () => ({ conversations: [conversation] }) };
+      if (path.endsWith('/item-1')) return { ok: true, json: async () => ({ item }) };
+      return { ok: true, json: async () => ({ items: [item], matches: [] }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /View details/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Message poster' }));
+
+    const composer = await screen.findByRole('textbox', { name: 'Write a message' });
+    const dialog = within(composer.closest('[role="dialog"]'));
+    fireEvent.change(composer, { target: { value: 'I think this could be my bottle.' } });
+    fireEvent.click(dialog.getByRole('button', { name: 'Send' }));
+    expect(await dialog.findByText('I think this could be my bottle.')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/conversations/conversation-1/messages'), expect.objectContaining({ method: 'POST' }));
+  });
+
   it('lets the listing owner edit details', async () => {
     localStorage.setItem('campusfind-user', JSON.stringify({ id: 'owner-1', name: 'Riley' }));
     localStorage.setItem('campusfind-token', 'test-token');

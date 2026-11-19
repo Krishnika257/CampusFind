@@ -459,6 +459,35 @@ html[data-theme="dark"] .button-secondary:hover { border-color: #7772b5; backgro
   .dialog-actions .button { width: 100%; }
 }
 .admin-claims { margin: 18px 24px 0; border-color: #e2e0f4; background: linear-gradient(145deg, #f4f3ff 0%, #fff 44%); }
+.messages-panel { margin: 18px 24px 0; border-color: #e2e0f4; background: linear-gradient(145deg, #f1f5ff 0%, #fff 44%); }
+.messages-panel .panel-heading .eyebrow { color: #6674b3; }
+.conversation-list { display: grid; gap: 9px; }
+.conversation-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; border: 1px solid #e6e8f2; border-radius: 12px; color: inherit; background: #fff; text-align: left; cursor: pointer; }
+.conversation-row:hover { border-color: #c4c9e7; box-shadow: 0 7px 18px #303b7410; }
+.conversation-avatar { display: grid; flex: 0 0 38px; width: 38px; height: 38px; place-items: center; border-radius: 13px; color: #5756a4; background: #ecebff; font-weight: 800; }
+.conversation-copy { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.conversation-copy strong { overflow: hidden; color: #32314d; font: 700 13px 'Manrope', sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-copy small { color: #77758b; font-size: 10px; }
+.conversation-copy > span { overflow: hidden; color: #858399; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-arrow { color: #6a67b3; font-size: 18px; }
+.messages-empty { padding: 22px 10px; }
+.message-poster-button { width: 100%; margin-top: 12px; }
+.message-backdrop { z-index: 30; }
+.message-dialog { display: flex; flex-direction: column; width: min(560px, 100%); max-height: min(85vh, 700px); padding: 22px; border: 1px solid #e4e0f0; border-radius: 19px; color: #292743; background: #fff; box-shadow: 0 24px 80px #17152e40; }
+.message-dialog .dialog-heading { padding-bottom: 15px; border-bottom: 1px solid #efedf4; }
+.message-dialog .dialog-heading h2 { margin: 6px 0 3px; color: #292743; font: 800 20px 'Manrope', sans-serif; }
+.message-dialog .dialog-heading span { color: #77758b; font-size: 11px; }
+.thread-messages { display: flex; flex: 1; flex-direction: column; gap: 10px; min-height: 160px; overflow: auto; padding: 16px 4px; }
+.message-bubble { align-self: flex-start; max-width: 82%; padding: 10px 12px; border: 1px solid #e8e6f0; border-radius: 14px 14px 14px 4px; background: #f7f6fb; }
+.message-bubble.own-message { align-self: flex-end; border-color: #dcdaf5; border-radius: 14px 14px 4px 14px; background: #f0efff; }
+.message-bubble p { margin: 0 0 5px; color: #393751; font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.message-bubble small { color: #858399; font-size: 9px; }
+.thread-empty { align-self: center; margin: auto; }
+.message-compose { display: flex; align-items: flex-end; gap: 9px; padding-top: 13px; border-top: 1px solid #efedf4; }
+.message-compose textarea { flex: 1; min-height: 43px; max-height: 110px; resize: vertical; padding: 10px 11px; border: 1px solid #e6e5ed; border-radius: 10px; color: #312f4c; background: #fdfdff; font: 400 13px 'DM Sans', sans-serif; }
+.message-compose .button { width: auto; min-height: 43px; padding: 0 17px; }
+.message-compose .button:disabled { cursor: not-allowed; opacity: .55; }
+.messages-panel .panel-icon { color: #4d5b9d; background: #e5eaff; }
 .admin-claims .panel-heading .eyebrow { color: #6c68bb; }
 .admin-count { display: grid; place-items: center; min-width: 30px; height: 30px; padding: 0 8px; border-radius: 10px; color: #fff; background: #625fc1; font-size: 12px; font-weight: 800; }
 .claim-list { display: grid; gap: 12px; }
@@ -475,6 +504,21 @@ html[data-theme="dark"] .button-secondary:hover { border-color: #7772b5; backgro
 .claim-button { width: 100%; }
 .sign-in-claim-note { margin: 17px 0 0; color: #77758b; font-size: 12px; }
 html[data-theme="dark"] .admin-claims { border-color: #3e3d55; background: linear-gradient(145deg, #2b2a43 0%, #22232f 50%); }
+html[data-theme="dark"] .messages-panel { border-color: #3d4259; background: linear-gradient(145deg, #282c42 0%, #22232f 55%); }
+html[data-theme="dark"] .conversation-row { border-color: #454556; background: #292a37; }
+html[data-theme="dark"] .conversation-row:hover { border-color: #65618f; }
+html[data-theme="dark"] .conversation-copy strong { color: #efedf8; }
+html[data-theme="dark"] .conversation-copy small, html[data-theme="dark"] .conversation-copy > span { color: #b8b6c8; }
+html[data-theme="dark"] .conversation-avatar { color: #d1ceff; background: #3b3a59; }
+html[data-theme="dark"] .message-dialog { border-color: #49485e; color: #eeedf7; background: #22232f; box-shadow: 0 24px 80px #0009; }
+html[data-theme="dark"] .message-dialog .dialog-heading { border-color: #444353; }
+html[data-theme="dark"] .message-dialog .dialog-heading h2 { color: #f0eff9; }
+html[data-theme="dark"] .message-dialog .dialog-heading span, html[data-theme="dark"] .message-bubble small { color: #b8b6c8; }
+html[data-theme="dark"] .message-bubble { border-color: #454556; background: #2a2b38; }
+html[data-theme="dark"] .message-bubble.own-message { border-color: #514c7c; background: #34324d; }
+html[data-theme="dark"] .message-bubble p { color: #e2e0ed; }
+html[data-theme="dark"] .message-compose { border-color: #444353; }
+html[data-theme="dark"] .message-compose textarea { border-color: #48485d; color: #eeedf7; background: #2d2e3d; }
 html[data-theme="dark"] .claim-card { border-color: #454556; background: #292a37; }
 html[data-theme="dark"] .claim-card-heading h3 { color: #efedf8; }
 html[data-theme="dark"] .claim-card-heading p, html[data-theme="dark"] .sign-in-claim-note { color: #b8b6c8; }
