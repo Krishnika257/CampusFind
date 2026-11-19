@@ -120,6 +120,27 @@ describe('CampusFind board', () => {
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/conversations/conversation-1/messages'), expect.objectContaining({ method: 'POST' }));
   });
 
+  it('shows match notifications and marks them read when opened', async () => {
+    localStorage.setItem('campusfind-user', JSON.stringify({ id: 'student-1', name: 'Riley', role: 'student' }));
+    localStorage.setItem('campusfind-token', 'student-token');
+    const notification = { _id: 'notice-1', type: 'match', title: 'Possible item match', message: 'A found listing may match your item.', isRead: false };
+    const fetchMock = vi.fn().mockImplementation(async (url, options = {}) => {
+      if (String(url).endsWith('/notifications/notice-1/read')) return { ok: true, json: async () => ({ notification: { ...notification, isRead: true } }) };
+      if (String(url).endsWith('/notifications')) return { ok: true, json: async () => ({ notifications: [notification] }) };
+      return { ok: true, json: async () => ({ items: [] }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+
+    const toggle = await screen.findByRole('button', { name: 'Notifications, 1 unread' });
+    fireEvent.click(toggle);
+    const popover = await screen.findByRole('region', { name: 'Notifications' });
+    fireEvent.click(within(popover).getByRole('button', { name: /Possible item match/ }));
+
+    expect(await screen.findByRole('button', { name: 'Notifications, 0 unread' })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/notifications/notice-1/read'), expect.objectContaining({ method: 'PATCH' }));
+  });
+
   it('lets the listing owner edit details', async () => {
     localStorage.setItem('campusfind-user', JSON.stringify({ id: 'owner-1', name: 'Riley' }));
     localStorage.setItem('campusfind-token', 'test-token');
@@ -172,12 +193,15 @@ describe('CampusFind board', () => {
     const fetchMock = vi.fn().mockImplementation(async (url, options = {}) => {
       if (String(url).endsWith('/admin/claims/claim-1') && options.method === 'PATCH') { reviewed = true; return { ok: true, json: async () => ({ claim: { ...claim, status: 'approved' } }) }; }
       if (String(url).endsWith('/admin/claims')) return { ok: true, json: async () => ({ claims: reviewed ? [] : [claim] }) };
+      if (String(url).endsWith('/admin/stats')) return { ok: true, json: async () => ({ stats: { totalItems: 8, openLost: 3, openFound: 2, returnedItems: 3, pendingClaims: 1, totalUsers: 6 } }) };
       return { ok: true, json: async () => ({ items: [] }) };
     });
     vi.stubGlobal('fetch', fetchMock);
     render(<App />);
 
     expect(await screen.findByText('Pending ownership claims')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Admin dashboard' })).toBeInTheDocument();
+    expect(screen.getByText('Campus members')).toBeInTheDocument();
     expect(await screen.findByText('A small tear is inside the left pocket.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Approve & mark returned' }));
     expect(await screen.findByText('All caught up')).toBeInTheDocument();

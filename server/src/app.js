@@ -3,10 +3,10 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
-import { Claim as defaultClaim, Conversation as defaultConversation, Item as defaultItem, Message as defaultMessage, User as defaultUser } from './models.js';
+import { Claim as defaultClaim, Conversation as defaultConversation, Item as defaultItem, Message as defaultMessage, Notification as defaultNotification, User as defaultUser } from './models.js';
 import { rankMatches } from './matching.js';
 
-export function createApp({ User = defaultUser, Item = defaultItem, Claim = defaultClaim, Conversation = defaultConversation, Message = defaultMessage, jwtSecret = process.env.JWT_SECRET } = {}) {
+export function createApp({ User = defaultUser, Item = defaultItem, Claim = defaultClaim, Conversation = defaultConversation, Message = defaultMessage, Notification = defaultNotification, jwtSecret = process.env.JWT_SECRET } = {}) {
   const app = express();
   app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173' }));
   app.use(express.json({ limit: '1mb' }));
@@ -27,6 +27,30 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
   function requireAdmin(request, response, next) {
     if (request.userRole !== 'admin') return response.status(403).json({ message: 'Administrator access is required.' });
     next();
+  }
+
+  async function safelyCreateNotification(fields) {
+    try { await Notification.create(fields); }
+    catch (error) { console.error(`Could not create a ${fields.type} notification: ${error.message}`); }
+  }
+
+  async function notifyPotentialMatches(source) {
+    const oppositeType = source.type === 'lost' ? 'found' : 'lost';
+    const candidates = await Item.find({ status: 'open', type: oppositeType, owner: { $ne: source.owner } })
+      .sort({ createdAt: -1 }).limit(300).populate('owner', 'name');
+    const matches = rankMatches(source, candidates);
+    await Promise.all(matches.map(({ item: candidate }) => {
+      const recipient = source.type === 'found' ? candidate.owner : source.owner;
+      const relatedItem = source.type === 'found' ? source : candidate;
+      const itemName = source.type === 'found' ? source.title : candidate.title;
+      return safelyCreateNotification({
+        user: recipient?._id || recipient?.id || recipient,
+        type: 'match',
+        title: 'Possible item match',
+        message: `A ${source.type === 'found' ? 'found' : 'lost'} listing may match your item: “${itemName}”.`,
+        item: relatedItem._id || relatedItem.id,
+      });
+    }));
   }
 
   app.get('/api/health', (_request, response) => {
@@ -114,6 +138,8 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
     try {
       const { title, description, category, location, type } = request.body;
       const item = await Item.create({ title, description, category, location, type, owner: request.userId });
+      try { await notifyPotentialMatches(item); }
+      catch (error) { console.error(`Could not check for matching listings: ${error.message}`); }
       return response.status(201).json({ item });
     } catch (error) { return next(error); }
   });
@@ -207,10 +233,49 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
     } catch (error) { return next(error); }
   });
 
+  app.get('/api/notifications', requireAuth, async (request, response, next) => {
+    try {
+      const notifications = await Notification.find({ user: request.userId }).sort({ createdAt: -1 }).limit(50).populate('item', 'title type status');
+      return response.json({ notifications });
+    } catch (error) { return next(error); }
+  });
+
+  app.patch('/api/notifications/:id/read', requireAuth, async (request, response, next) => {
+    try {
+      const notification = await Notification.findById(request.params.id);
+      if (!notification) return response.status(404).json({ message: 'Notification not found.' });
+      if (notification.user?.toString() !== request.userId) return response.status(403).json({ message: 'You cannot update this notification.' });
+      notification.isRead = true;
+      await notification.save();
+      return response.json({ notification });
+    } catch (error) { return next(error); }
+  });
+
+  app.patch('/api/notifications/read-all', requireAuth, async (request, response, next) => {
+    try {
+      const result = await Notification.updateMany({ user: request.userId, isRead: false }, { $set: { isRead: true } });
+      return response.json({ modifiedCount: result.modifiedCount || 0 });
+    } catch (error) { return next(error); }
+  });
+
   app.get('/api/admin/claims', requireAuth, requireAdmin, async (_request, response, next) => {
     try {
       const claims = await Claim.find({ status: 'pending' }).sort({ createdAt: 1 }).limit(100).populate([{ path: 'item', select: 'title location' }, { path: 'claimant', select: 'name email' }]);
       return response.json({ claims });
+    } catch (error) { return next(error); }
+  });
+
+  app.get('/api/admin/stats', requireAuth, requireAdmin, async (_request, response, next) => {
+    try {
+      const [totalItems, openLost, openFound, returnedItems, pendingClaims, totalUsers] = await Promise.all([
+        Item.countDocuments({}),
+        Item.countDocuments({ type: 'lost', status: 'open' }),
+        Item.countDocuments({ type: 'found', status: 'open' }),
+        Item.countDocuments({ status: 'claimed' }),
+        Claim.countDocuments({ status: 'pending' }),
+        User.countDocuments({}),
+      ]);
+      return response.json({ stats: { totalItems, openLost, openFound, returnedItems, pendingClaims, totalUsers } });
     } catch (error) { return next(error); }
   });
 
@@ -233,6 +298,14 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
       claim.reviewedBy = request.userId;
       claim.reviewedAt = new Date();
       await claim.save();
+      const relatedItem = await Item.findById(claim.item.toString());
+      await safelyCreateNotification({
+        user: claim.claimant,
+        type: status === 'approved' ? 'claim-approved' : 'claim-rejected',
+        title: status === 'approved' ? 'Claim approved' : 'Claim update',
+        message: `Your claim for “${relatedItem?.title || 'a campus item'}” was ${status}.`,
+        item: relatedItem?._id || relatedItem?.id,
+      });
       return response.json({ claim });
     } catch (error) { return next(error); }
   });
