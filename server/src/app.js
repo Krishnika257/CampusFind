@@ -90,6 +90,10 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
 
   app.get('/api/items', async (request, response, next) => {
     try {
+      const requestedPage = Number.parseInt(request.query.page, 10);
+      const requestedLimit = Number.parseInt(request.query.limit, 10);
+      const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+      const limit = Number.isInteger(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, 50) : 12;
       const filter = { status: 'open' };
       if (['lost', 'found'].includes(request.query.type)) filter.type = request.query.type;
       const { q, category, location, from, to } = request.query;
@@ -115,8 +119,11 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
         if (createdAt.$gte && createdAt.$lt && createdAt.$gte >= createdAt.$lt) return response.status(400).json({ message: 'Start date must be on or before end date.' });
         filter.createdAt = createdAt;
       }
-      const items = await Item.find(filter).sort({ createdAt: -1 }).limit(100).populate('owner', 'name');
-      return response.json({ items });
+      const [items, total] = await Promise.all([
+        Item.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).populate('owner', 'name'),
+        Item.countDocuments(filter),
+      ]);
+      return response.json({ items, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
     } catch (error) { return next(error); }
   });
 

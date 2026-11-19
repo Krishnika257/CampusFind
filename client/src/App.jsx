@@ -22,6 +22,8 @@ export default function App() {
   const [itemForm, setItemForm] = useState(emptyItem);
   const [theme, setTheme] = useState(() => localStorage.getItem('campusfind-theme') || 'light');
   const [items, setItems] = useState([]);
+  const [listingPagination, setListingPagination] = useState({ page: 1, pages: 0, total: 0, limit: 12 });
+  const [listingPage, setListingPage] = useState(1);
   const [filter, setFilter] = useState('all');
   const [searchFields, setSearchFields] = useState({ q: '', category: '', location: '', from: '', to: '' });
   const [message, setMessage] = useState('');
@@ -49,23 +51,27 @@ export default function App() {
   const [historyError, setHistoryError] = useState('');
   const [adminStats, setAdminStats] = useState(null);
 
-  async function loadItems() {
+  async function loadItems(page = listingPage) {
     try {
       const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('limit', '12');
       if (filter !== 'all') params.set('type', filter);
       Object.entries(searchFields).forEach(([key, value]) => { if (value.trim()) params.set(key, value.trim()); });
-      const query = params.size ? `?${params.toString()}` : '';
+      const query = `?${params.toString()}`;
       const response = await fetch(`${API}/items${query}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not load listings.');
       setItems(data.items);
+      setListingPagination(data.pagination || { page, pages: 1, total: data.items.length, limit: 12 });
+      setListingPage(page);
     } catch (error) { setMessage(error.message); }
   }
 
   useEffect(() => {
-    const timer = setTimeout(loadItems, 250);
+    const timer = setTimeout(() => loadItems(listingPage), 250);
     return () => clearTimeout(timer);
-  }, [filter, searchFields]);
+  }, [filter, searchFields, listingPage]);
 
   useEffect(() => {
     if (user?.role === 'admin' && token) loadAdminClaims();
@@ -389,7 +395,7 @@ export default function App() {
                 </form>
                 <p className="switch-mode">{mode === 'login' ? 'New to CampusFind?' : 'Already have an account?'} <button className="text-button" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>{mode === 'login' ? 'Create an account' : 'Sign in'}</button></p>
               </> : <form className="form-stack" onSubmit={submitItem}>
-                <div className="type-toggle" aria-label="Listing type">{['lost', 'found'].map((type) => <button key={type} type="button" className={itemForm.type === type ? 'selected' : ''} onClick={() => setItemForm({ ...itemForm, type })}>I {type} something</button>)}</div>
+      <div className="type-toggle" aria-label="Listing type">{['lost', 'found'].map((type) => <button key={type} type="button" className={itemForm.type === type ? 'selected' : ''} onClick={() => setItemForm({ ...itemForm, type })}>I {type} something</button>)}</div>
                 <label>Item name<input required maxLength="100" placeholder="e.g. Blue water bottle" value={itemForm.title} onChange={(e) => setItemForm({ ...itemForm, title: e.target.value })} /></label>
                 <label>Category<select value={itemForm.category} onChange={(e) => setItemForm({ ...itemForm, category: e.target.value })}>{['Electronics', 'Books', 'Clothing', 'Accessories', 'Other'].map((category) => <option key={category}>{category}</option>)}</select></label>
                 <label>Location<input required maxLength="120" placeholder="e.g. Library, second floor" value={itemForm.location} onChange={(e) => setItemForm({ ...itemForm, location: e.target.value })} /></label>
@@ -399,17 +405,18 @@ export default function App() {
             </section>
 
             <section className="panel listings-panel" id="updates">
-              <div className="panel-heading"><div><p className="eyebrow">HAPPENING AROUND JIIT</p><h2>Campus board</h2></div><select className="filter-select" aria-label="Filter listings" value={filter} onChange={(e) => setFilter(e.target.value)}><option value="all">All items</option><option value="lost">Lost</option><option value="found">Found</option></select></div>
+              <div className="panel-heading"><div><p className="eyebrow">HAPPENING AROUND JIIT</p><h2>Campus board</h2></div><select className="filter-select" aria-label="Filter listings" value={filter} onChange={(e) => { setListingPage(1); setFilter(e.target.value); }}><option value="all">All items</option><option value="lost">Lost</option><option value="found">Found</option></select></div>
               <div className="search-toolbar">
-                <label className="search-box"><span aria-hidden="true">⌕</span><input aria-label="Search items" placeholder="Search items or details" value={searchFields.q} onChange={(e) => setSearchFields({ ...searchFields, q: e.target.value })} /></label>
-                <select className="filter-select" aria-label="Filter by category" value={searchFields.category} onChange={(e) => setSearchFields({ ...searchFields, category: e.target.value })}><option value="">All categories</option>{['Electronics', 'Books', 'Clothing', 'Accessories', 'Other'].map((category) => <option key={category}>{category}</option>)}</select>
-                <input className="location-filter" aria-label="Filter by location" placeholder="Campus location" value={searchFields.location} onChange={(e) => setSearchFields({ ...searchFields, location: e.target.value })} />
-                <label className="date-filter"><span>From</span><input aria-label="From date" type="date" value={searchFields.from} onChange={(e) => setSearchFields({ ...searchFields, from: e.target.value })} /></label>
-                <label className="date-filter"><span>To</span><input aria-label="To date" type="date" value={searchFields.to} onChange={(e) => setSearchFields({ ...searchFields, to: e.target.value })} /></label>
-                {(Object.values(searchFields).some(Boolean) || filter !== 'all') && <button className="clear-filters" onClick={() => { setSearchFields({ q: '', category: '', location: '', from: '', to: '' }); setFilter('all'); }}>Clear filters</button>}
+                <label className="search-box"><span aria-hidden="true">⌕</span><input aria-label="Search items" placeholder="Search items or details" value={searchFields.q} onChange={(e) => { setListingPage(1); setSearchFields({ ...searchFields, q: e.target.value }); }} /></label>
+                <select className="filter-select" aria-label="Filter by category" value={searchFields.category} onChange={(e) => { setListingPage(1); setSearchFields({ ...searchFields, category: e.target.value }); }}><option value="">All categories</option>{['Electronics', 'Books', 'Clothing', 'Accessories', 'Other'].map((category) => <option key={category}>{category}</option>)}</select>
+                <input className="location-filter" aria-label="Filter by location" placeholder="Campus location" value={searchFields.location} onChange={(e) => { setListingPage(1); setSearchFields({ ...searchFields, location: e.target.value }); }} />
+                <label className="date-filter"><span>From</span><input aria-label="From date" type="date" value={searchFields.from} onChange={(e) => { setListingPage(1); setSearchFields({ ...searchFields, from: e.target.value }); }} /></label>
+                <label className="date-filter"><span>To</span><input aria-label="To date" type="date" value={searchFields.to} onChange={(e) => { setListingPage(1); setSearchFields({ ...searchFields, to: e.target.value }); }} /></label>
+                {(Object.values(searchFields).some(Boolean) || filter !== 'all') && <button className="clear-filters" onClick={() => { setListingPage(1); setSearchFields({ q: '', category: '', location: '', from: '', to: '' }); setFilter('all'); }}>Clear filters</button>}
               </div>
-              <div className="board-summary"><span className="summary-bubble">✦</span><span>{items.length ? `${items.length} matching campus ${items.length === 1 ? 'listing' : 'listings'}` : 'Your community board is ready'}</span><span className="summary-arrow">↗</span></div>
+              <div className="board-summary"><span className="summary-bubble">✦</span><span>{listingPagination.total ? `${listingPagination.total} matching campus ${listingPagination.total === 1 ? 'listing' : 'listings'}` : 'Your community board is ready'}</span><span className="summary-arrow">↗</span></div>
               <div className="listing-list">{items.length ? items.map((item) => <article className="listing-card" key={item._id}><div className={`listing-type ${item.type}`}>{item.type === 'lost' ? 'Looking for' : 'Found on campus'}</div><h3>{item.title}</h3><p>{item.description}</p><div className="listing-meta"><span>◈ &nbsp;{item.category}</span><span>⌖ &nbsp;{item.location}</span></div><div className="listing-card-footer"><small>Shared by {item.owner?.name || 'Campus member'}</small><button className="details-link" type="button" onClick={() => showDetails(item)}>View details <span aria-hidden="true">→</span></button></div></article>) : <div className="empty-state"><span aria-hidden="true">⌕</span><h3>{Object.values(searchFields).some(Boolean) || filter !== 'all' ? 'No matching listings' : 'It starts with our community'}</h3><p>{Object.values(searchFields).some(Boolean) || filter !== 'all' ? 'Try changing or clearing a few filters.' : 'Lost or found something? Add the first post and help it find its way home.'}</p></div>}</div>
+              {listingPagination.pages > 1 && <nav className="listing-pagination" aria-label="Campus board pages"><button className="button button-secondary" type="button" aria-label="Previous listings" disabled={listingPage <= 1} onClick={() => setListingPage((page) => page - 1)}>Previous</button><span aria-live="polite">Page {listingPage} of {listingPagination.pages}</span><button className="button button-secondary" type="button" aria-label="Next listings" disabled={listingPage >= listingPagination.pages} onClick={() => setListingPage((page) => page + 1)}>Next</button></nav>}
             </section>
           </div>
           {user?.role === 'admin' && <section className="admin-dashboard" id="admin-dashboard">

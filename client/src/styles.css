@@ -322,6 +322,9 @@ footer { margin: 26px 0 14px; color: #9998a9; font-size: 11px; }
 .search-box:focus-within { border-color: #75b28b; box-shadow: 0 0 0 3px #4b986f15; }
 .clear-filters { color: #39805c; }
 .listings-panel .listing-meta span { background: #f1f7f2; }
+.listing-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; padding-top: 15px; border-top: 1px solid #ececf3; color: var(--muted); font-size: 13px; }
+.listing-pagination .button { min-height: 38px; padding: 8px 13px; font-size: 12px; }
+.listing-pagination .button:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
 .listings-panel .listing-type.lost { color: #9b5f45; background: #fff0e5; }
 .listings-panel .listing-type.found { color: #32704f; background: #e5f5e9; }
 .notice { border-color: #d7e9db; color: #326548; background: #edf8ef; }
