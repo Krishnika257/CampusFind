@@ -24,6 +24,12 @@ export default function App() {
   const [items, setItems] = useState([]);
   const [listingPagination, setListingPagination] = useState({ page: 1, pages: 0, total: 0, limit: 12 });
   const [listingPage, setListingPage] = useState(1);
+  const [showMyListings, setShowMyListings] = useState(false);
+  const [myListings, setMyListings] = useState([]);
+  const [myListingsPagination, setMyListingsPagination] = useState({ page: 1, pages: 0, total: 0, limit: 12 });
+  const [myListingsPage, setMyListingsPage] = useState(1);
+  const [myListingsLoading, setMyListingsLoading] = useState(false);
+  const [myListingsError, setMyListingsError] = useState('');
   const [filter, setFilter] = useState('all');
   const [searchFields, setSearchFields] = useState({ q: '', category: '', location: '', from: '', to: '' });
   const [message, setMessage] = useState('');
@@ -68,6 +74,33 @@ export default function App() {
     } catch (error) { setMessage(error.message); }
   }
 
+  async function loadMyListings(page = 1) {
+    setMyListingsLoading(true);
+    setMyListingsError('');
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: '12' });
+      const response = await fetch(`${API}/my/items?${params}`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not load your listings.');
+      setMyListings(data.items || []);
+      setMyListingsPagination(data.pagination || { page, pages: 1, total: (data.items || []).length, limit: 12 });
+      setMyListingsPage(page);
+    } catch (error) { setMyListingsError(error.message); }
+    finally { setMyListingsLoading(false); }
+  }
+
+  async function openMyListings() {
+    setShowNotifications(false);
+    setShowNotificationHistory(false);
+    setShowMyListings(true);
+    await loadMyListings(1);
+  }
+
+  function returnToBoard() {
+    setShowMyListings(false);
+    setShowNotificationHistory(false);
+  }
+
   useEffect(() => {
     const timer = setTimeout(() => loadItems(listingPage), 250);
     return () => clearTimeout(timer);
@@ -79,7 +112,7 @@ export default function App() {
 
   useEffect(() => {
     if (!user || !token) {
-      setNotifications([]); setNotificationHistory([]); setNotificationUnreadCount(0); setAdminStats(null); setShowNotificationHistory(false);
+      setNotifications([]); setNotificationHistory([]); setNotificationUnreadCount(0); setAdminStats(null); setShowNotificationHistory(false); setShowMyListings(false); setMyListings([]);
       return undefined;
     }
     const refreshAccountData = () => {
@@ -169,6 +202,7 @@ export default function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not update this listing.');
       setSelectedItem(data.item); setEditingItem(false); setMessage('Your listing was updated.'); await loadItems();
+      if (showMyListings) await loadMyListings(myListingsPage);
     } catch (error) { setMessage(error.message); }
   }
 
@@ -182,6 +216,7 @@ export default function App() {
         throw new Error(data.message || 'Could not delete this listing.');
       }
       setSelectedItem(null); setMessage('Your listing was deleted.'); await loadItems();
+      if (showMyListings) await loadMyListings(1);
     } catch (error) { setMessage(error.message); }
   }
 
@@ -238,6 +273,7 @@ export default function App() {
 
   async function openNotificationHistory() {
     setShowNotifications(false);
+    setShowMyListings(false);
     setHistoryFilter('all');
     setShowNotificationHistory(true);
     await loadNotificationHistory(1, 'all');
@@ -265,6 +301,7 @@ export default function App() {
     }
     setShowNotifications(false);
     setShowNotificationHistory(false);
+    setShowMyListings(false);
     if (notification.conversation) {
       const conversationId = notification.conversation._id || notification.conversation;
       const latestConversations = await loadConversations();
@@ -367,7 +404,7 @@ export default function App() {
       <div className="dashboard-frame">
         <aside className="nav-rail" aria-label="CampusFind navigation">
           <a className="rail-logo" href="/" aria-label="CampusFind home"><CampusFindMark /></a>
-          <div className="rail-links"><a className="rail-link active" href="#board" aria-label="Campus board">⌂</a><a className="rail-link" href="#post" aria-label="Post an item">＋</a><a className="rail-link" href="#updates" aria-label="Updates">◷</a>{user && <a className="rail-link" href="#messages" aria-label="Messages">✉</a>}</div>
+          <div className="rail-links"><a className={`rail-link ${!showMyListings && !showNotificationHistory ? 'active' : ''}`} href="#board" onClick={returnToBoard} aria-label="Campus board">⌂</a><a className="rail-link" href="#post" onClick={returnToBoard} aria-label="Post an item">＋</a><a className="rail-link" href="#updates" onClick={returnToBoard} aria-label="Updates">◷</a>{user && <><button className={`rail-link ${showMyListings ? 'active' : ''}`} type="button" onClick={openMyListings} aria-label="My listings">▤</button><a className="rail-link" href="#messages" onClick={returnToBoard} aria-label="Messages">✉</a></>}</div>
           <div className="rail-bottom"><span className="rail-avatar">{user?.name?.[0]?.toUpperCase() || 'G'}</span><button className="rail-link rail-exit" onClick={user ? signOut : () => { setMode('login'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} aria-label={user ? 'Sign out' : 'Sign in'}>{user ? '↗' : '→'}</button></div>
         </aside>
         <div className="dashboard-content">
@@ -382,7 +419,7 @@ export default function App() {
           </section>
           {message && <p className="notice" role="status">{message}</p>}
 
-          <div className={showNotificationHistory ? 'dashboard-main-view is-hidden' : 'dashboard-main-view'}>
+          <div className={showNotificationHistory || showMyListings ? 'dashboard-main-view is-hidden' : 'dashboard-main-view'}>
           <div className="content-grid" id="board">
             <section className="panel post-panel" id="post">
               <div className="panel-heading"><div><p className="eyebrow">QUICK ACTION</p><h2>{user ? 'Post an item' : mode === 'login' ? 'Welcome back' : 'Create your account'}</h2></div><span className="panel-icon">✎</span></div>
@@ -446,6 +483,17 @@ export default function App() {
             </button>)}</div> : <div className="empty-state messages-empty"><span aria-hidden="true">✉</span><h3>No conversations yet</h3><p>Open a listing and choose “Message poster” to privately contact its owner.</p></div>}
           </section>}
           </div>
+          {showMyListings && user && <section className="panel my-listings-page" aria-labelledby="my-listings-title">
+            <button className="history-back-button" type="button" onClick={returnToBoard}>← Back to campus board</button>
+            <div className="my-listings-heading"><div><p className="eyebrow">YOUR CAMPUS POSTS</p><h2 id="my-listings-title">My listings</h2><p>Keep track of items you posted, including those already returned.</p></div><div className="my-listings-heading-actions"><span className="my-listings-count">{myListingsPagination.total} total</span><button className="button button-secondary" type="button" onClick={() => loadMyListings(myListingsPage)} disabled={myListingsLoading}>Refresh</button></div></div>
+            {myListingsError && <p className="notice" role="alert">{myListingsError}</p>}
+            {myListingsLoading ? <p className="history-loading">Loading your listings…</p> : myListings.length ? <div className="my-listings-list">{myListings.map((item) => <article className="my-listing-card" key={item._id || item.id}>
+              <div className="my-listing-card-heading"><div><span className={`listing-type ${item.type}`}>{item.type === 'lost' ? 'Looking for' : 'Found on campus'}</span><h3>{item.title}</h3></div><span className={`my-listing-status ${item.status === 'claimed' ? 'returned' : 'open'}`}>{item.status === 'claimed' ? 'Returned' : 'Open'}</span></div>
+              <p>{item.description}</p><div className="my-listing-meta"><span>{item.category}</span><span>{item.location}</span><span>{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'Recently posted'}</span></div>
+              <div className="my-listing-footer"><small>{item.status === 'claimed' ? 'This listing was marked as returned.' : 'Visible on the campus board.'}</small><button className="details-link" type="button" onClick={() => showDetails(item)}>View details and manage <span aria-hidden="true">→</span></button></div>
+            </article>)}</div> : <div className="empty-state my-listings-empty"><span aria-hidden="true">▤</span><h3>No listings yet</h3><p>Listings you post will appear here so you can manage them later.</p><button className="button button-primary" type="button" onClick={() => { returnToBoard(); window.location.hash = 'post'; }}>Post an item</button></div>}
+            {!myListingsLoading && myListingsPagination.pages > 1 && <nav className="listing-pagination" aria-label="My listings pages"><button className="button button-secondary" type="button" aria-label="Previous my listings" disabled={myListingsPage <= 1} onClick={() => loadMyListings(myListingsPage - 1)}>Previous</button><span aria-live="polite">Page {myListingsPage} of {myListingsPagination.pages}</span><button className="button button-secondary" type="button" aria-label="Next my listings" disabled={myListingsPage >= myListingsPagination.pages} onClick={() => loadMyListings(myListingsPage + 1)}>Next</button></nav>}
+          </section>}
           {showNotificationHistory && user && <section className="panel notification-history-page" aria-labelledby="notification-history-title">
             <button className="history-back-button" type="button" onClick={() => setShowNotificationHistory(false)}>← Back to campus board</button>
             <div className="notification-history-heading"><div><p className="eyebrow">YOUR UPDATES</p><h2 id="notification-history-title">Notification history</h2><p>All your match, claim, and message updates in one place.</p></div><button className="button button-secondary" type="button" disabled={notificationUnreadCount === 0} onClick={markAllNotificationsRead}>Mark all read</button></div>

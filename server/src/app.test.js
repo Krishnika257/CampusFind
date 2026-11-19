@@ -186,6 +186,22 @@ describe('CampusFind API', () => {
     expect(capped.body.pagination.limit).toBe(50);
   });
 
+  it('requires sign-in and returns a user’s listings across statuses', async () => {
+    models.items.push(
+      { id: 'mine-open', owner: 'user-7', status: 'open', title: 'Open keys', createdAt: new Date('2026-11-03') },
+      { id: 'mine-claimed', owner: 'user-7', status: 'claimed', title: 'Returned wallet', createdAt: new Date('2026-11-02') },
+      { id: 'someone-elses', owner: 'user-8', status: 'open', title: 'Other phone', createdAt: new Date('2026-11-04') },
+    );
+    const unauthorized = await request(app).get('/api/my/items');
+    const token = jwt.sign({}, secret, { subject: 'user-7', expiresIn: '1h' });
+    const response = await request(app).get('/api/my/items').set('Authorization', `Bearer ${token}`);
+    expect(unauthorized.status).toBe(401);
+    expect(response.status).toBe(200);
+    expect(response.body.items.map((item) => item.title)).toEqual(['Open keys', 'Returned wallet']);
+    expect(response.body.pagination).toMatchObject({ page: 1, limit: 12, total: 2, pages: 1 });
+    expect(models.Item.lastFilter).toEqual({ owner: 'user-7' });
+  });
+
   it('rejects impossible date ranges and malformed dates', async () => {
     const reversed = await request(app).get('/api/items').query({ from: '2026-11-05', to: '2026-11-01' });
     const malformed = await request(app).get('/api/items').query({ from: '2026-02-30' });

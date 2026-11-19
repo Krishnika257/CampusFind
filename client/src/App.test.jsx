@@ -65,6 +65,36 @@ describe('CampusFind board', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('page=1&limit=12&category=Electronics')));
   });
 
+  it('shows the signed-in user’s open and returned listings in My Listings', async () => {
+    localStorage.setItem('campusfind-user', JSON.stringify({ id: 'owner-1', name: 'Riley', role: 'student' }));
+    localStorage.setItem('campusfind-token', 'student-token');
+    const ownedListings = [
+      { _id: 'open-item', title: 'Blue keys', description: 'Lost near the library', category: 'Accessories', location: 'Library', type: 'lost', status: 'open', owner: { _id: 'owner-1', name: 'Riley' } },
+      { _id: 'returned-item', title: 'Returned wallet', description: 'Found at the cafe', category: 'Accessories', location: 'Cafe', type: 'found', status: 'claimed', owner: { _id: 'owner-1', name: 'Riley' } },
+    ];
+    const fetchMock = vi.fn().mockImplementation(async (url) => {
+      const parsed = new URL(String(url), 'http://localhost');
+      if (parsed.pathname.endsWith('/my/items')) return { ok: true, json: async () => ({ items: ownedListings, pagination: { page: 1, limit: 12, total: 2, pages: 1 } }) };
+      if (parsed.pathname.endsWith('/items/returned-item/matches')) return { ok: true, json: async () => ({ matches: [] }) };
+      if (parsed.pathname.endsWith('/items/returned-item')) return { ok: true, json: async () => ({ item: ownedListings[1] }) };
+      if (parsed.pathname.endsWith('/items')) return { ok: true, json: async () => ({ items: [], pagination: { page: 1, limit: 12, total: 0, pages: 0 } }) };
+      if (parsed.pathname.endsWith('/notifications')) return { ok: true, json: async () => ({ notifications: [], unreadCount: 0 }) };
+      return { ok: true, json: async () => ({ conversations: [] }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'My listings' }));
+    expect(await screen.findByRole('heading', { name: 'My listings' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Blue keys' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Returned wallet' })).toBeInTheDocument();
+    expect(screen.getByText('Returned', { selector: '.my-listing-status' })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: /View details and manage/ })[1]);
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit listing' })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/my/items?page=1&limit=12'), expect.objectContaining({ headers: { Authorization: 'Bearer student-token' } }));
+  });
+
   it('toggles dark mode and remembers the selected theme', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ items: [] }) }));
     render(<App />);
