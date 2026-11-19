@@ -3,10 +3,10 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
-import { Claim as defaultClaim, Item as defaultItem, User as defaultUser } from './models.js';
+import { Claim as defaultClaim, Conversation as defaultConversation, Item as defaultItem, Message as defaultMessage, User as defaultUser } from './models.js';
 import { rankMatches } from './matching.js';
 
-export function createApp({ User = defaultUser, Item = defaultItem, Claim = defaultClaim, jwtSecret = process.env.JWT_SECRET } = {}) {
+export function createApp({ User = defaultUser, Item = defaultItem, Claim = defaultClaim, Conversation = defaultConversation, Message = defaultMessage, jwtSecret = process.env.JWT_SECRET } = {}) {
   const app = express();
   app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173' }));
   app.use(express.json({ limit: '1mb' }));
@@ -155,6 +155,55 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
       if (await Claim.findOne({ item: item.id, claimant: request.userId, status: 'pending' })) return response.status(409).json({ message: 'You already have a pending claim for this listing.' });
       const claim = await Claim.create({ item: item.id, claimant: request.userId, proof });
       return response.status(201).json({ claim });
+    } catch (error) { return next(error); }
+  });
+
+  app.post('/api/items/:id/conversations', requireAuth, async (request, response, next) => {
+    try {
+      const item = await Item.findById(request.params.id);
+      if (!item) return response.status(404).json({ message: 'Listing not found.' });
+      const ownerId = item.owner?.toString();
+      if (!ownerId) return response.status(409).json({ message: 'This listing has no available contact.' });
+      if (ownerId === request.userId) return response.status(400).json({ message: 'You cannot message yourself about your listing.' });
+      if (item.status !== 'open') return response.status(409).json({ message: 'This listing is no longer open for messages.' });
+      const participantKey = [ownerId, request.userId].sort().join(':');
+      let conversation = await Conversation.findOne({ item: item._id || item.id, participantKey });
+      if (!conversation) conversation = await Conversation.create({ item: item._id || item.id, participants: [ownerId, request.userId], participantKey });
+      return response.status(200).json({ conversation });
+    } catch (error) { return next(error); }
+  });
+
+  app.get('/api/conversations', requireAuth, async (request, response, next) => {
+    try {
+      const conversations = await Conversation.find({ participants: request.userId }).sort({ updatedAt: -1 }).limit(50)
+        .populate([{ path: 'item', select: 'title type status' }, { path: 'participants', select: 'name' }]);
+      return response.json({ conversations });
+    } catch (error) { return next(error); }
+  });
+
+  app.get('/api/conversations/:id/messages', requireAuth, async (request, response, next) => {
+    try {
+      const conversation = await Conversation.findById(request.params.id);
+      if (!conversation) return response.status(404).json({ message: 'Conversation not found.' });
+      if (!conversation.participants.some((participant) => participant.toString() === request.userId)) return response.status(403).json({ message: 'You cannot view this conversation.' });
+      const messages = await Message.find({ conversation: conversation.id || conversation._id }).sort({ createdAt: -1 }).limit(200).populate('sender', 'name');
+      return response.json({ messages: messages.reverse() });
+    } catch (error) { return next(error); }
+  });
+
+  app.post('/api/conversations/:id/messages', requireAuth, async (request, response, next) => {
+    try {
+      const conversation = await Conversation.findById(request.params.id);
+      if (!conversation) return response.status(404).json({ message: 'Conversation not found.' });
+      if (!conversation.participants.some((participant) => participant.toString() === request.userId)) return response.status(403).json({ message: 'You cannot message this conversation.' });
+      const text = typeof request.body.text === 'string' ? request.body.text.trim() : '';
+      if (!text || text.length > 1000) return response.status(400).json({ message: 'Messages must contain between 1 and 1000 characters.' });
+      const createdAt = new Date();
+      const message = await Message.create({ conversation: conversation.id || conversation._id, sender: request.userId, text });
+      conversation.lastMessage = text.slice(0, 300);
+      conversation.lastMessageAt = createdAt;
+      await conversation.save();
+      return response.status(201).json({ message });
     } catch (error) { return next(error); }
   });
 

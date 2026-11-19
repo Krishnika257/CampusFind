@@ -33,6 +33,11 @@ export default function App() {
   const [claims, setClaims] = useState([]);
   const [matchedItems, setMatchedItems] = useState([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
+  const [conversations, setConversations] = useState([]);
+  const [activeConversation, setActiveConversation] = useState(null);
+  const [threadMessages, setThreadMessages] = useState([]);
+  const [messageDraft, setMessageDraft] = useState('');
+  const [messagesLoading, setMessagesLoading] = useState(false);
 
   async function loadItems() {
     try {
@@ -55,6 +60,25 @@ export default function App() {
   useEffect(() => {
     if (user?.role === 'admin' && token) loadAdminClaims();
   }, [user?.role, token]);
+
+  useEffect(() => {
+    if (user && token) loadConversations();
+    else { setConversations([]); setActiveConversation(null); setThreadMessages([]); }
+  }, [user?.id, token]);
+
+  useEffect(() => {
+    if (!activeConversation || !token) return undefined;
+    const conversationId = activeConversation._id || activeConversation.id;
+    const refreshMessages = async () => {
+      try {
+        const response = await fetch(`${API}/conversations/${conversationId}/messages`, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await response.json();
+        if (response.ok) setThreadMessages(data.messages || []);
+      } catch { /* Keep the current thread visible if a refresh is temporarily unavailable. */ }
+    };
+    const interval = setInterval(refreshMessages, 5000);
+    return () => clearInterval(interval);
+  }, [activeConversation?._id, activeConversation?.id, token]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -165,6 +189,68 @@ export default function App() {
     } catch (error) { setMessage(error.message); }
   }
 
+  async function loadConversations() {
+    try {
+      const response = await fetch(`${API}/conversations`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not load messages.');
+      setConversations(data.conversations || []);
+      return data.conversations || [];
+    } catch (error) { setMessage(error.message); return []; }
+  }
+
+  async function openConversation(conversation) {
+    const conversationId = conversation._id || conversation.id;
+    setActiveConversation(conversation);
+    setMessagesLoading(true);
+    try {
+      const response = await fetch(`${API}/conversations/${conversationId}/messages`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not load this conversation.');
+      setThreadMessages(data.messages || []);
+    } catch (error) { setMessage(error.message); }
+    finally { setMessagesLoading(false); }
+  }
+
+  async function startConversation(item) {
+    if (!user || !token) { setMessage('Sign in to message the person who posted this item.'); return; }
+    try {
+      const response = await fetch(`${API}/items/${item._id}/conversations`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not start a conversation.');
+      const conversationId = data.conversation._id || data.conversation.id;
+      const updated = await loadConversations();
+      const conversation = updated.find((entry) => String(entry._id || entry.id) === String(conversationId)) || data.conversation;
+      setSelectedItem(null);
+      await openConversation(conversation);
+    } catch (error) { setMessage(error.message); }
+  }
+
+  async function sendMessage(event) {
+    event.preventDefault();
+    const text = messageDraft.trim();
+    if (!text || !activeConversation) return;
+    const conversationId = activeConversation._id || activeConversation.id;
+    try {
+      const response = await fetch(`${API}/conversations/${conversationId}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ text }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not send your message.');
+      setThreadMessages((current) => [...current, data.message]);
+      setMessageDraft('');
+      await loadConversations();
+    } catch (error) { setMessage(error.message); }
+  }
+
+  function otherParticipantName(conversation) {
+    const other = conversation.participants?.find((participant) => String(participant?._id || participant?.id || participant) !== String(user?.id));
+    return other?.name || 'Campus member';
+  }
+
+  function isOwnMessage(entry) {
+    const senderId = entry.sender?._id || entry.sender?.id || entry.sender;
+    return String(senderId) === String(user?.id);
+  }
+
   function signOut() {
     localStorage.removeItem('campusfind-token'); localStorage.removeItem('campusfind-user'); setToken(''); setUser(null); setMessage('You’ve signed out.');
   }
@@ -174,7 +260,7 @@ export default function App() {
       <div className="dashboard-frame">
         <aside className="nav-rail" aria-label="CampusFind navigation">
           <a className="rail-logo" href="/" aria-label="CampusFind home"><CampusFindMark /></a>
-          <div className="rail-links"><a className="rail-link active" href="#board" aria-label="Campus board">⌂</a><a className="rail-link" href="#post" aria-label="Post an item">＋</a><a className="rail-link" href="#updates" aria-label="Updates">◷</a></div>
+          <div className="rail-links"><a className="rail-link active" href="#board" aria-label="Campus board">⌂</a><a className="rail-link" href="#post" aria-label="Post an item">＋</a><a className="rail-link" href="#updates" aria-label="Updates">◷</a>{user && <a className="rail-link" href="#messages" aria-label="Messages">✉</a>}</div>
           <div className="rail-bottom"><span className="rail-avatar">{user?.name?.[0]?.toUpperCase() || 'G'}</span><button className="rail-link rail-exit" onClick={user ? signOut : () => { setMode('login'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} aria-label={user ? 'Sign out' : 'Sign in'}>{user ? '↗' : '→'}</button></div>
         </aside>
         <div className="dashboard-content">
@@ -232,6 +318,12 @@ export default function App() {
               <div className="claim-review-actions"><button className="button button-secondary reject-button" type="button" onClick={() => reviewClaim(claim._id, 'rejected')}>Reject claim</button><button className="button button-primary" type="button" onClick={() => reviewClaim(claim._id, 'approved')}>Approve &amp; mark returned</button></div>
             </article>)}</div> : <div className="empty-state admin-empty"><span aria-hidden="true">✓</span><h3>All caught up</h3><p>New ownership claims will appear here for staff review.</p></div>}
           </section>}
+          {user && <section className="panel messages-panel" id="messages">
+            <div className="panel-heading"><div><p className="eyebrow">PRIVATE CAMPUS CHATS</p><h2>Your messages</h2></div><span className="panel-icon">✉</span></div>
+            {conversations.length ? <div className="conversation-list">{conversations.map((conversation) => <button className="conversation-row" key={conversation._id || conversation.id} type="button" onClick={() => openConversation(conversation)}>
+              <span className="conversation-avatar">{otherParticipantName(conversation)[0]?.toUpperCase() || 'C'}</span><span className="conversation-copy"><strong>{conversation.item?.title || 'Campus item'}</strong><small>Chat with {otherParticipantName(conversation)}</small><span>{conversation.lastMessage || 'Start the conversation'}</span></span><span className="conversation-arrow" aria-hidden="true">→</span>
+            </button>)}</div> : <div className="empty-state messages-empty"><span aria-hidden="true">✉</span><h3>No conversations yet</h3><p>Open a listing and choose “Message poster” to privately contact its owner.</p></div>}
+          </section>}
           {selectedItem && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedItem(null); }}>
             <section className="item-dialog" role="dialog" aria-modal="true" aria-labelledby="item-dialog-title">
               <div className="dialog-heading"><div><span className={`listing-type ${selectedItem.type}`}>{selectedItem.type === 'lost' ? 'Looking for' : 'Found on campus'}</span><p className="dialog-kicker">CAMPUS LISTING</p></div><button className="dialog-close" type="button" aria-label="Close details" onClick={() => setSelectedItem(null)}>×</button></div>
@@ -255,9 +347,18 @@ export default function App() {
                 {user && selectedItem.type === 'found' && selectedItem.status === 'open' && !isItemOwner(selectedItem) && <div className="claim-action">
                   {showClaimForm ? <form className="form-stack" onSubmit={submitClaim}><label>Proof of ownership<textarea required minLength="20" maxLength="1000" rows="4" placeholder="Describe a detail only the owner would know" value={claimProof} onChange={(e) => setClaimProof(e.target.value)} /><small>Share specific details to help campus staff verify your claim.</small></label><div className="dialog-actions"><button className="button button-secondary" type="button" onClick={() => setShowClaimForm(false)}>Cancel</button><button className="button button-primary" type="submit">Send claim</button></div></form> : <button className="button button-primary claim-button" type="button" onClick={() => setShowClaimForm(true)}>This is mine — submit a claim</button>}
                 </div>}
+                {user && selectedItem.status === 'open' && !isItemOwner(selectedItem) && <button className="button button-secondary message-poster-button" type="button" onClick={() => startConversation(selectedItem)}>Message poster</button>}
+                {!user && selectedItem.status === 'open' && <p className="sign-in-claim-note">Sign in to privately message the person who posted this item.</p>}
                 {!user && selectedItem.type === 'found' && <p className="sign-in-claim-note">Sign in to submit an ownership claim.</p>}
                 {isItemOwner(selectedItem) && <div className="dialog-actions owner-actions"><button className="button button-secondary" type="button" onClick={deleteItem}>Delete listing</button><button className="button button-primary" type="button" onClick={startEditing}>Edit listing</button></div>}
               </>}
+            </section>
+          </div>}
+          {activeConversation && <div className="modal-backdrop message-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setActiveConversation(null); }}>
+            <section className="message-dialog" role="dialog" aria-modal="true" aria-labelledby="message-dialog-title">
+              <div className="dialog-heading"><div><p className="dialog-kicker">PRIVATE CONVERSATION</p><h2 id="message-dialog-title">{activeConversation.item?.title || 'Campus item'}</h2><span>Chat with {otherParticipantName(activeConversation)}</span></div><button className="dialog-close" type="button" aria-label="Close conversation" onClick={() => setActiveConversation(null)}>×</button></div>
+              <div className="thread-messages" aria-live="polite">{messagesLoading ? <p className="match-empty">Loading messages…</p> : threadMessages.length ? threadMessages.map((entry) => <article className={`message-bubble ${isOwnMessage(entry) ? 'own-message' : ''}`} key={entry._id || entry.id}><p>{entry.text}</p><small>{isOwnMessage(entry) ? 'You' : entry.sender?.name || 'Campus member'} · {entry.createdAt ? new Date(entry.createdAt).toLocaleString() : 'Just now'}</small></article>) : <div className="empty-state thread-empty"><span aria-hidden="true">✉</span><h3>Start the conversation</h3><p>Keep your contact details private while arranging the return.</p></div>}</div>
+              <form className="message-compose" onSubmit={sendMessage}><textarea aria-label="Write a message" required maxLength="1000" rows="2" placeholder="Write a private message…" value={messageDraft} onChange={(event) => setMessageDraft(event.target.value)} /><button className="button button-primary" type="submit" disabled={!messageDraft.trim()}>Send</button></form>
             </section>
           </div>}
           <footer>Made with care for the JIIT campus community <span aria-hidden="true">♥</span></footer>

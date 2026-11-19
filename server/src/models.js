@@ -27,6 +27,23 @@ const claimSchema = new mongoose.Schema({
   reviewedAt: { type: Date },
 }, { timestamps: true });
 
+const conversationSchema = new mongoose.Schema({
+  item: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
+  participants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }],
+  participantKey: { type: String, required: true },
+  lastMessage: { type: String, trim: true, maxlength: 300, default: '' },
+  lastMessageAt: { type: Date },
+}, { timestamps: true });
+conversationSchema.index({ item: 1, participantKey: 1 }, { unique: true });
+
+const messageSchema = new mongoose.Schema({
+  conversation: { type: mongoose.Schema.Types.ObjectId, ref: 'Conversation', required: true, index: true },
+  sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  text: { type: String, required: true, trim: true, maxlength: 1000 },
+}, { timestamps: true });
+
 export const User = mongoose.models.User || mongoose.model('User', userSchema);
 export const Item = mongoose.models.Item || mongoose.model('Item', itemSchema);
 export const Claim = mongoose.models.Claim || mongoose.model('Claim', claimSchema);
+export const Conversation = mongoose.models.Conversation || mongoose.model('Conversation', conversationSchema);
+export const Message = mongoose.models.Message || mongoose.model('Message', messageSchema);

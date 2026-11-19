@@ -9,6 +9,8 @@ const secret = 'test-only-campusfind-secret';
 function createModels() {
   const users = [];
   const claims = [];
+  const conversations = [];
+  const messages = [];
   const itemModel = {
     lastFilter: null,
     find(filter) {
@@ -36,7 +38,25 @@ function createModels() {
     find() { return { sort() { return this; }, limit() { return this; }, async populate() { return claims; } }; },
     async findById(id) { return claims.find((claim) => claim.id === id) || null; },
   };
-  return { users, claims, User: userModel, Item: itemModel, Claim: claimModel };
+  const conversationModel = {
+    async findOne(filter) { return conversations.find((entry) => entry.item === filter.item && entry.participantKey === filter.participantKey) || null; },
+    async create(fields) {
+      const conversation = { id: `conversation-${conversations.length + 1}`, lastMessage: '', ...fields, async save() { return this; } };
+      conversations.push(conversation);
+      return conversation;
+    },
+    find(filter) { return { sort() { return this; }, limit() { return this; }, async populate() { return conversations.filter((entry) => entry.participants.includes(filter.participants)); } }; },
+    async findById(id) { return conversations.find((entry) => entry.id === id) || null; },
+  };
+  const messageModel = {
+    find(filter) { return { sort() { return this; }, limit() { return this; }, async populate() { return messages.filter((entry) => entry.conversation === filter.conversation); } }; },
+    async create(fields) {
+      const message = { id: `message-${messages.length + 1}`, ...fields, createdAt: new Date() };
+      messages.push(message);
+      return message;
+    },
+  };
+  return { users, claims, conversations, messages, User: userModel, Item: itemModel, Claim: claimModel, Conversation: conversationModel, Message: messageModel };
 }
 
 describe('CampusFind API', () => {
@@ -131,6 +151,28 @@ describe('CampusFind API', () => {
     expect(models.Item.find).toHaveBeenCalledWith({ status: 'open', type: 'found', _id: { $ne: 'lost-1' } });
     expect(response.body.matches[0]).toMatchObject({ item: { title: candidate.title }, score: expect.any(Number) });
     expect(response.body.matches[0].reasons).toContain('Same category');
+  });
+
+  it('creates private item conversations and allows only participants to read or send messages', async () => {
+    const item = { id: 'item-1', owner: { toString: () => 'owner-1' }, status: 'open' };
+    models.Item.findById = vi.fn().mockResolvedValue(item);
+    const studentToken = jwt.sign({}, secret, { subject: 'student-1', expiresIn: '1h' });
+    const ownerToken = jwt.sign({}, secret, { subject: 'owner-1', expiresIn: '1h' });
+    const strangerToken = jwt.sign({}, secret, { subject: 'stranger-1', expiresIn: '1h' });
+
+    const created = await request(app).post('/api/items/item-1/conversations').set('Authorization', `Bearer ${studentToken}`);
+    const duplicate = await request(app).post('/api/items/item-1/conversations').set('Authorization', `Bearer ${studentToken}`);
+    expect(created.status).toBe(200);
+    expect(duplicate.body.conversation.id).toBe(created.body.conversation.id);
+    const conversationId = created.body.conversation.id;
+
+    const denied = await request(app).get(`/api/conversations/${conversationId}/messages`).set('Authorization', `Bearer ${strangerToken}`);
+    expect(denied.status).toBe(403);
+    const sent = await request(app).post(`/api/conversations/${conversationId}/messages`).set('Authorization', `Bearer ${studentToken}`).send({ text: 'I think this might be my water bottle.' });
+    const visibleToOwner = await request(app).get(`/api/conversations/${conversationId}/messages`).set('Authorization', `Bearer ${ownerToken}`);
+    expect(sent.status).toBe(201);
+    expect(sent.body.message).toMatchObject({ sender: 'student-1', text: 'I think this might be my water bottle.' });
+    expect(visibleToOwner.body.messages).toHaveLength(1);
   });
 
   it('only allows the owner to edit a listing', async () => {
