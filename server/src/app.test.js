@@ -17,7 +17,15 @@ function createModels() {
     lastFilter: null,
     find(filter) {
       this.lastFilter = filter;
-      return { sort() { return this; }, limit() { return this; }, async populate() { return []; } };
+      let offset = 0;
+      let pageSize = 12;
+      let matches = items.filter((item) => Object.entries(filter).every(([key, value]) => item[key] === value));
+      return {
+        sort() { matches = matches.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)); return this; },
+        skip(value) { offset = value; return this; },
+        limit(value) { pageSize = value; return this; },
+        async populate() { return matches.slice(offset, offset + pageSize); },
+      };
     },
     async create(fields) { const item = { id: `item-${items.length + 1}`, ...fields }; items.push(item); return item; },
     async countDocuments(filter) { return items.filter((item) => Object.entries(filter).every(([key, value]) => item[key] === value)).length; },
@@ -161,6 +169,37 @@ describe('CampusFind API', () => {
     expect(filter.$or[0].title.$regex).toBe('pen\\.\\*');
     expect(filter.createdAt.$gte.toISOString()).toBe('2026-11-01T00:00:00.000Z');
     expect(filter.createdAt.$lt.toISOString()).toBe('2026-11-04T00:00:00.000Z');
+  });
+
+  it('paginates open listing results and caps the requested page size', async () => {
+    models.items.push(
+      { id: 'item-1', status: 'open', title: 'Newest', createdAt: new Date('2026-11-03') },
+      { id: 'item-2', status: 'open', title: 'Older', createdAt: new Date('2026-11-02') },
+      { id: 'item-3', status: 'open', title: 'Oldest', createdAt: new Date('2026-11-01') },
+      { id: 'item-4', status: 'claimed', title: 'Already claimed', createdAt: new Date('2026-11-04') },
+    );
+    const response = await request(app).get('/api/items').query({ page: 2, limit: 2 });
+    expect(response.status).toBe(200);
+    expect(response.body.items.map((item) => item.title)).toEqual(['Oldest']);
+    expect(response.body.pagination).toEqual({ page: 2, limit: 2, total: 3, pages: 2 });
+    const capped = await request(app).get('/api/items').query({ page: 1, limit: 500 });
+    expect(capped.body.pagination.limit).toBe(50);
+  });
+
+  it('requires sign-in and returns a user’s listings across statuses', async () => {
+    models.items.push(
+      { id: 'mine-open', owner: 'user-7', status: 'open', title: 'Open keys', createdAt: new Date('2026-11-03') },
+      { id: 'mine-claimed', owner: 'user-7', status: 'claimed', title: 'Returned wallet', createdAt: new Date('2026-11-02') },
+      { id: 'someone-elses', owner: 'user-8', status: 'open', title: 'Other phone', createdAt: new Date('2026-11-04') },
+    );
+    const unauthorized = await request(app).get('/api/my/items');
+    const token = jwt.sign({}, secret, { subject: 'user-7', expiresIn: '1h' });
+    const response = await request(app).get('/api/my/items').set('Authorization', `Bearer ${token}`);
+    expect(unauthorized.status).toBe(401);
+    expect(response.status).toBe(200);
+    expect(response.body.items.map((item) => item.title)).toEqual(['Open keys', 'Returned wallet']);
+    expect(response.body.pagination).toMatchObject({ page: 1, limit: 12, total: 2, pages: 1 });
+    expect(models.Item.lastFilter).toEqual({ owner: 'user-7' });
   });
 
   it('rejects impossible date ranges and malformed dates', async () => {

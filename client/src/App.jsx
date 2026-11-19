@@ -22,6 +22,14 @@ export default function App() {
   const [itemForm, setItemForm] = useState(emptyItem);
   const [theme, setTheme] = useState(() => localStorage.getItem('campusfind-theme') || 'light');
   const [items, setItems] = useState([]);
+  const [listingPagination, setListingPagination] = useState({ page: 1, pages: 0, total: 0, limit: 12 });
+  const [listingPage, setListingPage] = useState(1);
+  const [showMyListings, setShowMyListings] = useState(false);
+  const [myListings, setMyListings] = useState([]);
+  const [myListingsPagination, setMyListingsPagination] = useState({ page: 1, pages: 0, total: 0, limit: 12 });
+  const [myListingsPage, setMyListingsPage] = useState(1);
+  const [myListingsLoading, setMyListingsLoading] = useState(false);
+  const [myListingsError, setMyListingsError] = useState('');
   const [filter, setFilter] = useState('all');
   const [searchFields, setSearchFields] = useState({ q: '', category: '', location: '', from: '', to: '' });
   const [message, setMessage] = useState('');
@@ -49,23 +57,54 @@ export default function App() {
   const [historyError, setHistoryError] = useState('');
   const [adminStats, setAdminStats] = useState(null);
 
-  async function loadItems() {
+  async function loadItems(page = listingPage) {
     try {
       const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('limit', '12');
       if (filter !== 'all') params.set('type', filter);
       Object.entries(searchFields).forEach(([key, value]) => { if (value.trim()) params.set(key, value.trim()); });
-      const query = params.size ? `?${params.toString()}` : '';
+      const query = `?${params.toString()}`;
       const response = await fetch(`${API}/items${query}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not load listings.');
       setItems(data.items);
+      setListingPagination(data.pagination || { page, pages: 1, total: data.items.length, limit: 12 });
+      setListingPage(page);
     } catch (error) { setMessage(error.message); }
   }
 
+  async function loadMyListings(page = 1) {
+    setMyListingsLoading(true);
+    setMyListingsError('');
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: '12' });
+      const response = await fetch(`${API}/my/items?${params}`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not load your listings.');
+      setMyListings(data.items || []);
+      setMyListingsPagination(data.pagination || { page, pages: 1, total: (data.items || []).length, limit: 12 });
+      setMyListingsPage(page);
+    } catch (error) { setMyListingsError(error.message); }
+    finally { setMyListingsLoading(false); }
+  }
+
+  async function openMyListings() {
+    setShowNotifications(false);
+    setShowNotificationHistory(false);
+    setShowMyListings(true);
+    await loadMyListings(1);
+  }
+
+  function returnToBoard() {
+    setShowMyListings(false);
+    setShowNotificationHistory(false);
+  }
+
   useEffect(() => {
-    const timer = setTimeout(loadItems, 250);
+    const timer = setTimeout(() => loadItems(listingPage), 250);
     return () => clearTimeout(timer);
-  }, [filter, searchFields]);
+  }, [filter, searchFields, listingPage]);
 
   useEffect(() => {
     if (user?.role === 'admin' && token) loadAdminClaims();
@@ -73,7 +112,7 @@ export default function App() {
 
   useEffect(() => {
     if (!user || !token) {
-      setNotifications([]); setNotificationHistory([]); setNotificationUnreadCount(0); setAdminStats(null); setShowNotificationHistory(false);
+      setNotifications([]); setNotificationHistory([]); setNotificationUnreadCount(0); setAdminStats(null); setShowNotificationHistory(false); setShowMyListings(false); setMyListings([]);
       return undefined;
     }
     const refreshAccountData = () => {
@@ -163,6 +202,7 @@ export default function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not update this listing.');
       setSelectedItem(data.item); setEditingItem(false); setMessage('Your listing was updated.'); await loadItems();
+      if (showMyListings) await loadMyListings(myListingsPage);
     } catch (error) { setMessage(error.message); }
   }
 
@@ -176,6 +216,7 @@ export default function App() {
         throw new Error(data.message || 'Could not delete this listing.');
       }
       setSelectedItem(null); setMessage('Your listing was deleted.'); await loadItems();
+      if (showMyListings) await loadMyListings(1);
     } catch (error) { setMessage(error.message); }
   }
 
@@ -232,6 +273,7 @@ export default function App() {
 
   async function openNotificationHistory() {
     setShowNotifications(false);
+    setShowMyListings(false);
     setHistoryFilter('all');
     setShowNotificationHistory(true);
     await loadNotificationHistory(1, 'all');
@@ -259,6 +301,7 @@ export default function App() {
     }
     setShowNotifications(false);
     setShowNotificationHistory(false);
+    setShowMyListings(false);
     if (notification.conversation) {
       const conversationId = notification.conversation._id || notification.conversation;
       const latestConversations = await loadConversations();
@@ -361,7 +404,7 @@ export default function App() {
       <div className="dashboard-frame">
         <aside className="nav-rail" aria-label="CampusFind navigation">
           <a className="rail-logo" href="/" aria-label="CampusFind home"><CampusFindMark /></a>
-          <div className="rail-links"><a className="rail-link active" href="#board" aria-label="Campus board">⌂</a><a className="rail-link" href="#post" aria-label="Post an item">＋</a><a className="rail-link" href="#updates" aria-label="Updates">◷</a>{user && <a className="rail-link" href="#messages" aria-label="Messages">✉</a>}</div>
+          <div className="rail-links"><a className={`rail-link ${!showMyListings && !showNotificationHistory ? 'active' : ''}`} href="#board" onClick={returnToBoard} aria-label="Campus board">⌂</a><a className="rail-link" href="#post" onClick={returnToBoard} aria-label="Post an item">＋</a><a className="rail-link" href="#updates" onClick={returnToBoard} aria-label="Updates">◷</a>{user && <><button className={`rail-link ${showMyListings ? 'active' : ''}`} type="button" onClick={openMyListings} aria-label="My listings">▤</button><a className="rail-link" href="#messages" onClick={returnToBoard} aria-label="Messages">✉</a></>}</div>
           <div className="rail-bottom"><span className="rail-avatar">{user?.name?.[0]?.toUpperCase() || 'G'}</span><button className="rail-link rail-exit" onClick={user ? signOut : () => { setMode('login'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} aria-label={user ? 'Sign out' : 'Sign in'}>{user ? '↗' : '→'}</button></div>
         </aside>
         <div className="dashboard-content">
@@ -376,7 +419,7 @@ export default function App() {
           </section>
           {message && <p className="notice" role="status">{message}</p>}
 
-          <div className={showNotificationHistory ? 'dashboard-main-view is-hidden' : 'dashboard-main-view'}>
+          <div className={showNotificationHistory || showMyListings ? 'dashboard-main-view is-hidden' : 'dashboard-main-view'}>
           <div className="content-grid" id="board">
             <section className="panel post-panel" id="post">
               <div className="panel-heading"><div><p className="eyebrow">QUICK ACTION</p><h2>{user ? 'Post an item' : mode === 'login' ? 'Welcome back' : 'Create your account'}</h2></div><span className="panel-icon">✎</span></div>
@@ -389,7 +432,7 @@ export default function App() {
                 </form>
                 <p className="switch-mode">{mode === 'login' ? 'New to CampusFind?' : 'Already have an account?'} <button className="text-button" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>{mode === 'login' ? 'Create an account' : 'Sign in'}</button></p>
               </> : <form className="form-stack" onSubmit={submitItem}>
-                <div className="type-toggle" aria-label="Listing type">{['lost', 'found'].map((type) => <button key={type} type="button" className={itemForm.type === type ? 'selected' : ''} onClick={() => setItemForm({ ...itemForm, type })}>I {type} something</button>)}</div>
+      <div className="type-toggle" aria-label="Listing type">{['lost', 'found'].map((type) => <button key={type} type="button" className={itemForm.type === type ? 'selected' : ''} onClick={() => setItemForm({ ...itemForm, type })}>I {type} something</button>)}</div>
                 <label>Item name<input required maxLength="100" placeholder="e.g. Blue water bottle" value={itemForm.title} onChange={(e) => setItemForm({ ...itemForm, title: e.target.value })} /></label>
                 <label>Category<select value={itemForm.category} onChange={(e) => setItemForm({ ...itemForm, category: e.target.value })}>{['Electronics', 'Books', 'Clothing', 'Accessories', 'Other'].map((category) => <option key={category}>{category}</option>)}</select></label>
                 <label>Location<input required maxLength="120" placeholder="e.g. Library, second floor" value={itemForm.location} onChange={(e) => setItemForm({ ...itemForm, location: e.target.value })} /></label>
@@ -399,17 +442,18 @@ export default function App() {
             </section>
 
             <section className="panel listings-panel" id="updates">
-              <div className="panel-heading"><div><p className="eyebrow">HAPPENING AROUND JIIT</p><h2>Campus board</h2></div><select className="filter-select" aria-label="Filter listings" value={filter} onChange={(e) => setFilter(e.target.value)}><option value="all">All items</option><option value="lost">Lost</option><option value="found">Found</option></select></div>
+              <div className="panel-heading"><div><p className="eyebrow">HAPPENING AROUND JIIT</p><h2>Campus board</h2></div><select className="filter-select" aria-label="Filter listings" value={filter} onChange={(e) => { setListingPage(1); setFilter(e.target.value); }}><option value="all">All items</option><option value="lost">Lost</option><option value="found">Found</option></select></div>
               <div className="search-toolbar">
-                <label className="search-box"><span aria-hidden="true">⌕</span><input aria-label="Search items" placeholder="Search items or details" value={searchFields.q} onChange={(e) => setSearchFields({ ...searchFields, q: e.target.value })} /></label>
-                <select className="filter-select" aria-label="Filter by category" value={searchFields.category} onChange={(e) => setSearchFields({ ...searchFields, category: e.target.value })}><option value="">All categories</option>{['Electronics', 'Books', 'Clothing', 'Accessories', 'Other'].map((category) => <option key={category}>{category}</option>)}</select>
-                <input className="location-filter" aria-label="Filter by location" placeholder="Campus location" value={searchFields.location} onChange={(e) => setSearchFields({ ...searchFields, location: e.target.value })} />
-                <label className="date-filter"><span>From</span><input aria-label="From date" type="date" value={searchFields.from} onChange={(e) => setSearchFields({ ...searchFields, from: e.target.value })} /></label>
-                <label className="date-filter"><span>To</span><input aria-label="To date" type="date" value={searchFields.to} onChange={(e) => setSearchFields({ ...searchFields, to: e.target.value })} /></label>
-                {(Object.values(searchFields).some(Boolean) || filter !== 'all') && <button className="clear-filters" onClick={() => { setSearchFields({ q: '', category: '', location: '', from: '', to: '' }); setFilter('all'); }}>Clear filters</button>}
+                <label className="search-box"><span aria-hidden="true">⌕</span><input aria-label="Search items" placeholder="Search items or details" value={searchFields.q} onChange={(e) => { setListingPage(1); setSearchFields({ ...searchFields, q: e.target.value }); }} /></label>
+                <select className="filter-select" aria-label="Filter by category" value={searchFields.category} onChange={(e) => { setListingPage(1); setSearchFields({ ...searchFields, category: e.target.value }); }}><option value="">All categories</option>{['Electronics', 'Books', 'Clothing', 'Accessories', 'Other'].map((category) => <option key={category}>{category}</option>)}</select>
+                <input className="location-filter" aria-label="Filter by location" placeholder="Campus location" value={searchFields.location} onChange={(e) => { setListingPage(1); setSearchFields({ ...searchFields, location: e.target.value }); }} />
+                <label className="date-filter"><span>From</span><input aria-label="From date" type="date" value={searchFields.from} onChange={(e) => { setListingPage(1); setSearchFields({ ...searchFields, from: e.target.value }); }} /></label>
+                <label className="date-filter"><span>To</span><input aria-label="To date" type="date" value={searchFields.to} onChange={(e) => { setListingPage(1); setSearchFields({ ...searchFields, to: e.target.value }); }} /></label>
+                {(Object.values(searchFields).some(Boolean) || filter !== 'all') && <button className="clear-filters" onClick={() => { setListingPage(1); setSearchFields({ q: '', category: '', location: '', from: '', to: '' }); setFilter('all'); }}>Clear filters</button>}
               </div>
-              <div className="board-summary"><span className="summary-bubble">✦</span><span>{items.length ? `${items.length} matching campus ${items.length === 1 ? 'listing' : 'listings'}` : 'Your community board is ready'}</span><span className="summary-arrow">↗</span></div>
+              <div className="board-summary"><span className="summary-bubble">✦</span><span>{listingPagination.total ? `${listingPagination.total} matching campus ${listingPagination.total === 1 ? 'listing' : 'listings'}` : 'Your community board is ready'}</span><span className="summary-arrow">↗</span></div>
               <div className="listing-list">{items.length ? items.map((item) => <article className="listing-card" key={item._id}><div className={`listing-type ${item.type}`}>{item.type === 'lost' ? 'Looking for' : 'Found on campus'}</div><h3>{item.title}</h3><p>{item.description}</p><div className="listing-meta"><span>◈ &nbsp;{item.category}</span><span>⌖ &nbsp;{item.location}</span></div><div className="listing-card-footer"><small>Shared by {item.owner?.name || 'Campus member'}</small><button className="details-link" type="button" onClick={() => showDetails(item)}>View details <span aria-hidden="true">→</span></button></div></article>) : <div className="empty-state"><span aria-hidden="true">⌕</span><h3>{Object.values(searchFields).some(Boolean) || filter !== 'all' ? 'No matching listings' : 'It starts with our community'}</h3><p>{Object.values(searchFields).some(Boolean) || filter !== 'all' ? 'Try changing or clearing a few filters.' : 'Lost or found something? Add the first post and help it find its way home.'}</p></div>}</div>
+              {listingPagination.pages > 1 && <nav className="listing-pagination" aria-label="Campus board pages"><button className="button button-secondary" type="button" aria-label="Previous listings" disabled={listingPage <= 1} onClick={() => setListingPage((page) => page - 1)}>Previous</button><span aria-live="polite">Page {listingPage} of {listingPagination.pages}</span><button className="button button-secondary" type="button" aria-label="Next listings" disabled={listingPage >= listingPagination.pages} onClick={() => setListingPage((page) => page + 1)}>Next</button></nav>}
             </section>
           </div>
           {user?.role === 'admin' && <section className="admin-dashboard" id="admin-dashboard">
@@ -439,6 +483,17 @@ export default function App() {
             </button>)}</div> : <div className="empty-state messages-empty"><span aria-hidden="true">✉</span><h3>No conversations yet</h3><p>Open a listing and choose “Message poster” to privately contact its owner.</p></div>}
           </section>}
           </div>
+          {showMyListings && user && <section className="panel my-listings-page" aria-labelledby="my-listings-title">
+            <button className="history-back-button" type="button" onClick={returnToBoard}>← Back to campus board</button>
+            <div className="my-listings-heading"><div><p className="eyebrow">YOUR CAMPUS POSTS</p><h2 id="my-listings-title">My listings</h2><p>Keep track of items you posted, including those already returned.</p></div><div className="my-listings-heading-actions"><span className="my-listings-count">{myListingsPagination.total} total</span><button className="button button-secondary" type="button" onClick={() => loadMyListings(myListingsPage)} disabled={myListingsLoading}>Refresh</button></div></div>
+            {myListingsError && <p className="notice" role="alert">{myListingsError}</p>}
+            {myListingsLoading ? <p className="history-loading">Loading your listings…</p> : myListings.length ? <div className="my-listings-list">{myListings.map((item) => <article className="my-listing-card" key={item._id || item.id}>
+              <div className="my-listing-card-heading"><div><span className={`listing-type ${item.type}`}>{item.type === 'lost' ? 'Looking for' : 'Found on campus'}</span><h3>{item.title}</h3></div><span className={`my-listing-status ${item.status === 'claimed' ? 'returned' : 'open'}`}>{item.status === 'claimed' ? 'Returned' : 'Open'}</span></div>
+              <p>{item.description}</p><div className="my-listing-meta"><span>{item.category}</span><span>{item.location}</span><span>{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'Recently posted'}</span></div>
+              <div className="my-listing-footer"><small>{item.status === 'claimed' ? 'This listing was marked as returned.' : 'Visible on the campus board.'}</small><button className="details-link" type="button" onClick={() => showDetails(item)}>View details and manage <span aria-hidden="true">→</span></button></div>
+            </article>)}</div> : <div className="empty-state my-listings-empty"><span aria-hidden="true">▤</span><h3>No listings yet</h3><p>Listings you post will appear here so you can manage them later.</p><button className="button button-primary" type="button" onClick={() => { returnToBoard(); window.location.hash = 'post'; }}>Post an item</button></div>}
+            {!myListingsLoading && myListingsPagination.pages > 1 && <nav className="listing-pagination" aria-label="My listings pages"><button className="button button-secondary" type="button" aria-label="Previous my listings" disabled={myListingsPage <= 1} onClick={() => loadMyListings(myListingsPage - 1)}>Previous</button><span aria-live="polite">Page {myListingsPage} of {myListingsPagination.pages}</span><button className="button button-secondary" type="button" aria-label="Next my listings" disabled={myListingsPage >= myListingsPagination.pages} onClick={() => loadMyListings(myListingsPage + 1)}>Next</button></nav>}
+          </section>}
           {showNotificationHistory && user && <section className="panel notification-history-page" aria-labelledby="notification-history-title">
             <button className="history-back-button" type="button" onClick={() => setShowNotificationHistory(false)}>← Back to campus board</button>
             <div className="notification-history-heading"><div><p className="eyebrow">YOUR UPDATES</p><h2 id="notification-history-title">Notification history</h2><p>All your match, claim, and message updates in one place.</p></div><button className="button button-secondary" type="button" disabled={notificationUnreadCount === 0} onClick={markAllNotificationsRead}>Mark all read</button></div>
