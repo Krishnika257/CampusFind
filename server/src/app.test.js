@@ -11,13 +11,16 @@ function createModels() {
   const claims = [];
   const conversations = [];
   const messages = [];
+  const items = [];
+  const notifications = [];
   const itemModel = {
     lastFilter: null,
     find(filter) {
       this.lastFilter = filter;
       return { sort() { return this; }, limit() { return this; }, async populate() { return []; } };
     },
-    async create(fields) { return { id: 'item-1', ...fields }; },
+    async create(fields) { const item = { id: `item-${items.length + 1}`, ...fields }; items.push(item); return item; },
+    async countDocuments(filter) { return items.filter((item) => Object.entries(filter).every(([key, value]) => item[key] === value)).length; },
   };
   const userModel = {
     async exists(filter) { return users.some((user) => user.email === filter.email); },
@@ -27,6 +30,7 @@ function createModels() {
       return user;
     },
     async findOne(filter) { return users.find((user) => user.email === filter.email) || null; },
+    async countDocuments() { return users.length; },
   };
   const claimModel = {
     async findOne(filter) { return claims.find((claim) => claim.item === filter.item && claim.claimant === filter.claimant && claim.status === filter.status) || null; },
@@ -37,6 +41,7 @@ function createModels() {
     },
     find() { return { sort() { return this; }, limit() { return this; }, async populate() { return claims; } }; },
     async findById(id) { return claims.find((claim) => claim.id === id) || null; },
+    async countDocuments(filter) { return claims.filter((claim) => Object.entries(filter).every(([key, value]) => claim[key] === value)).length; },
   };
   const conversationModel = {
     async findOne(filter) { return conversations.find((entry) => entry.item === filter.item && entry.participantKey === filter.participantKey) || null; },
@@ -56,7 +61,21 @@ function createModels() {
       return message;
     },
   };
-  return { users, claims, conversations, messages, User: userModel, Item: itemModel, Claim: claimModel, Conversation: conversationModel, Message: messageModel };
+  const notificationModel = {
+    async create(fields) {
+      const notification = { id: `notification-${notifications.length + 1}`, isRead: false, ...fields, async save() { return this; } };
+      notifications.push(notification);
+      return notification;
+    },
+    find(filter) { return { sort() { return this; }, limit() { return this; }, async populate() { return notifications.filter((entry) => entry.user === filter.user); } }; },
+    async findById(id) { return notifications.find((entry) => entry.id === id) || null; },
+    async updateMany(filter) {
+      const unread = notifications.filter((entry) => entry.user === filter.user && entry.isRead === filter.isRead);
+      unread.forEach((entry) => { entry.isRead = true; });
+      return { modifiedCount: unread.length };
+    },
+  };
+  return { users, claims, conversations, messages, items, notifications, User: userModel, Item: itemModel, Claim: claimModel, Conversation: conversationModel, Message: messageModel, Notification: notificationModel };
 }
 
 describe('CampusFind API', () => {
@@ -175,6 +194,49 @@ describe('CampusFind API', () => {
     expect(visibleToOwner.body.messages).toHaveLength(1);
   });
 
+  it('notifies the owner when a newly posted item is a likely match', async () => {
+    const foundItem = { id: 'found-1', title: 'Blue Samsung phone', description: 'Cracked case', category: 'Electronics', location: 'Library', type: 'found', owner: 'finder-1' };
+    models.Item.find = vi.fn(() => ({ sort() { return this; }, limit() { return this; }, async populate() { return [foundItem]; } }));
+    const token = jwt.sign({}, secret, { subject: 'lost-owner-1', expiresIn: '1h' });
+
+    const response = await request(app).post('/api/items').set('Authorization', `Bearer ${token}`).send({ title: 'Blue Samsung phone', description: 'Cracked case', category: 'Electronics', location: 'Library', type: 'lost' });
+
+    expect(response.status).toBe(201);
+    expect(models.notifications).toHaveLength(1);
+    expect(models.notifications[0]).toMatchObject({ user: 'lost-owner-1', type: 'match', item: 'found-1' });
+  });
+
+  it('only lets a notification owner mark it as read', async () => {
+    const notification = await models.Notification.create({ user: 'user-1', type: 'match', title: 'Possible item match', message: 'A likely match was found.' });
+    const ownerToken = jwt.sign({}, secret, { subject: 'user-1', expiresIn: '1h' });
+    const strangerToken = jwt.sign({}, secret, { subject: 'user-2', expiresIn: '1h' });
+
+    const forbidden = await request(app).patch(`/api/notifications/${notification.id}/read`).set('Authorization', `Bearer ${strangerToken}`);
+    const read = await request(app).patch(`/api/notifications/${notification.id}/read`).set('Authorization', `Bearer ${ownerToken}`);
+
+    expect(forbidden.status).toBe(403);
+    expect(read.status).toBe(200);
+    expect(read.body.notification.isRead).toBe(true);
+  });
+
+  it('restricts dashboard statistics to admins and reports project counts', async () => {
+    models.items.push(
+      { type: 'lost', status: 'open' },
+      { type: 'found', status: 'open' },
+      { type: 'found', status: 'claimed' },
+    );
+    models.claims.push({ status: 'pending' });
+    models.users.push({ id: 'student-1' }, { id: 'admin-1' });
+    const studentToken = jwt.sign({ role: 'student' }, secret, { subject: 'student-1', expiresIn: '1h' });
+    const adminToken = jwt.sign({ role: 'admin' }, secret, { subject: 'admin-1', expiresIn: '1h' });
+
+    const forbidden = await request(app).get('/api/admin/stats').set('Authorization', `Bearer ${studentToken}`);
+    const allowed = await request(app).get('/api/admin/stats').set('Authorization', `Bearer ${adminToken}`);
+
+    expect(forbidden.status).toBe(403);
+    expect(allowed.body.stats).toEqual({ totalItems: 3, openLost: 1, openFound: 1, returnedItems: 1, pendingClaims: 1, totalUsers: 2 });
+  });
+
   it('only allows the owner to edit a listing', async () => {
     const item = { id: 'item-1', owner: { toString: () => 'user-7' }, title: 'Old title', async save() { return this; } };
     models.Item.findById = vi.fn().mockResolvedValue(item);
@@ -225,7 +287,7 @@ describe('CampusFind API', () => {
 
   it('restricts claim review to admins and marks an approved item claimed', async () => {
     const item = { id: 'item-1', status: 'open', async save() { return this; } };
-    const claim = { id: 'claim-1', item: 'item-1', status: 'pending', async save() { return this; } };
+    const claim = { id: 'claim-1', item: 'item-1', claimant: 'user-2', status: 'pending', async save() { return this; } };
     models.Item.findById = vi.fn().mockResolvedValue(item);
     models.Claim.findById = vi.fn().mockResolvedValue(claim);
     const studentToken = jwt.sign({ role: 'student' }, secret, { subject: 'user-2', expiresIn: '1h' });
@@ -237,6 +299,7 @@ describe('CampusFind API', () => {
     expect(approved.status).toBe(200);
     expect(approved.body.claim).toMatchObject({ status: 'approved', reviewedBy: 'admin-1' });
     expect(item.status).toBe('claimed');
+    expect(models.notifications[0]).toMatchObject({ user: 'user-2', type: 'claim-approved' });
   });
 
   it('does not allow public registration to assign an administrator role', async () => {

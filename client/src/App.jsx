@@ -38,6 +38,9 @@ export default function App() {
   const [threadMessages, setThreadMessages] = useState([]);
   const [messageDraft, setMessageDraft] = useState('');
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [adminStats, setAdminStats] = useState(null);
 
   async function loadItems() {
     try {
@@ -60,6 +63,17 @@ export default function App() {
   useEffect(() => {
     if (user?.role === 'admin' && token) loadAdminClaims();
   }, [user?.role, token]);
+
+  useEffect(() => {
+    if (!user || !token) { setNotifications([]); setAdminStats(null); return undefined; }
+    const refreshAccountData = () => {
+      loadNotifications();
+      if (user.role === 'admin') loadAdminStats();
+    };
+    refreshAccountData();
+    const interval = setInterval(refreshAccountData, 30000);
+    return () => clearInterval(interval);
+  }, [user?.id, user?.role, token]);
 
   useEffect(() => {
     if (user && token) loadConversations();
@@ -102,7 +116,7 @@ export default function App() {
       const response = await fetch(`${API}/items`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(itemForm) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not post this item.');
-      setItemForm(emptyItem); setMessage('Your listing is posted.'); await loadItems();
+      setItemForm(emptyItem); setMessage('Your listing is posted.'); await loadItems(); await loadNotifications();
     } catch (error) { setMessage(error.message); }
   }
 
@@ -179,13 +193,49 @@ export default function App() {
     } catch (error) { setMessage(error.message); }
   }
 
+  async function loadNotifications() {
+    try {
+      const response = await fetch(`${API}/notifications`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await response.json();
+      if (response.ok) setNotifications(data.notifications || []);
+    } catch { /* The board remains usable if notification refresh is temporarily unavailable. */ }
+  }
+
+  async function loadAdminStats() {
+    try {
+      const response = await fetch(`${API}/admin/stats`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not load dashboard statistics.');
+      setAdminStats(data.stats);
+    } catch (error) { setMessage(error.message); }
+  }
+
+  async function openNotification(notification) {
+    if (!notification.isRead) {
+      try {
+        const response = await fetch(`${API}/notifications/${notification._id || notification.id}/read`, { method: 'PATCH', headers: { Authorization: `Bearer ${token}` } });
+        if (response.ok) setNotifications((current) => current.map((entry) => (entry._id || entry.id) === (notification._id || notification.id) ? { ...entry, isRead: true } : entry));
+      } catch { /* Keep the notification available if marking it read fails. */ }
+    }
+    setShowNotifications(false);
+    if (notification.item?._id) showDetails(notification.item);
+  }
+
+  async function markAllNotificationsRead() {
+    try {
+      const response = await fetch(`${API}/notifications/read-all`, { method: 'PATCH', headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) return;
+      setNotifications((current) => current.map((entry) => ({ ...entry, isRead: true })));
+    } catch { /* Ignore a temporary notification service outage. */ }
+  }
+
   async function reviewClaim(claimId, status) {
     setMessage('');
     try {
       const response = await fetch(`${API}/admin/claims/${claimId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ status }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not update this claim.');
-      setMessage(`Claim ${status}.`); await loadAdminClaims(); await loadItems();
+      setMessage(`Claim ${status}.`); await loadAdminClaims(); await loadAdminStats(); await loadItems();
     } catch (error) { setMessage(error.message); }
   }
 
@@ -266,7 +316,7 @@ export default function App() {
         <div className="dashboard-content">
           <header className="topbar">
             <a className="brand" href="/" aria-label="CampusFind home"><span className="brand-mark"><CampusFindMark /></span><span>Campus<span className="brand-accent">Find</span></span></a>
-            <div className="account-area"><span className="campus-chip"><span className="campus-dot" /> JIIT · NOIDA CAMPUS</span><button className="theme-toggle" type="button" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span></button>{user ? <><span className="welcome">Hi, {user.name}</span><button className="text-button" onClick={signOut}>Sign out</button></> : <span className="campus-label">Welcome to your campus board</span>}</div>
+            <div className="account-area"><span className="campus-chip"><span className="campus-dot" /> JIIT · NOIDA CAMPUS</span>{user && <div className="notification-area"><button className="notification-toggle" type="button" aria-label={`Notifications, ${notifications.filter((entry) => !entry.isRead).length} unread`} aria-expanded={showNotifications} onClick={() => setShowNotifications((visible) => !visible)}><span aria-hidden="true">🔔</span>{notifications.some((entry) => !entry.isRead) && <i aria-hidden="true" />}</button>{showNotifications && <section className="notification-popover" aria-label="Notifications"><div className="notification-popover-heading"><strong>Notifications</strong>{notifications.some((entry) => !entry.isRead) && <button type="button" onClick={markAllNotificationsRead}>Mark all read</button>}</div>{notifications.length ? notifications.slice(0, 8).map((notification) => <button className={`notification-row ${notification.isRead ? '' : 'unread'}`} type="button" key={notification._id || notification.id} onClick={() => openNotification(notification)}><span className="notification-symbol" aria-hidden="true">{notification.type === 'match' ? '⌕' : '✓'}</span><span><strong>{notification.title}</strong><small>{notification.message}</small></span></button>) : <p className="notification-empty">You’re all caught up.</p>}</section>}</div>}<button className="theme-toggle" type="button" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span></button>{user ? <><span className="welcome">Hi, {user.name}</span><button className="text-button" onClick={signOut}>Sign out</button></> : <span className="campus-label">Welcome to your campus board</span>}</div>
           </header>
 
           <section className="hero compact-hero" aria-labelledby="hero-title">
@@ -310,6 +360,17 @@ export default function App() {
               <div className="listing-list">{items.length ? items.map((item) => <article className="listing-card" key={item._id}><div className={`listing-type ${item.type}`}>{item.type === 'lost' ? 'Looking for' : 'Found on campus'}</div><h3>{item.title}</h3><p>{item.description}</p><div className="listing-meta"><span>◈ &nbsp;{item.category}</span><span>⌖ &nbsp;{item.location}</span></div><div className="listing-card-footer"><small>Shared by {item.owner?.name || 'Campus member'}</small><button className="details-link" type="button" onClick={() => showDetails(item)}>View details <span aria-hidden="true">→</span></button></div></article>) : <div className="empty-state"><span aria-hidden="true">⌕</span><h3>{Object.values(searchFields).some(Boolean) || filter !== 'all' ? 'No matching listings' : 'It starts with our community'}</h3><p>{Object.values(searchFields).some(Boolean) || filter !== 'all' ? 'Try changing or clearing a few filters.' : 'Lost or found something? Add the first post and help it find its way home.'}</p></div>}</div>
             </section>
           </div>
+          {user?.role === 'admin' && <section className="admin-dashboard" id="admin-dashboard">
+            <div className="admin-dashboard-heading"><div><p className="eyebrow">CAMPUS OVERVIEW</p><h2>Admin dashboard</h2></div><span className="dashboard-caption">Live counts from CampusFind</span></div>
+            <div className="admin-stat-grid">{[
+              ['Total listings', adminStats?.totalItems, 'Across lost and found'],
+              ['Open lost', adminStats?.openLost, 'Waiting to be found'],
+              ['Open found', adminStats?.openFound, 'Waiting to be claimed'],
+              ['Returned', adminStats?.returnedItems, 'Marked as claimed'],
+              ['Pending claims', adminStats?.pendingClaims, 'Need staff review'],
+              ['Campus members', adminStats?.totalUsers, 'Registered accounts'],
+            ].map(([label, value, caption]) => <article className="admin-stat-card" key={label}><span>{label}</span><strong>{value ?? '—'}</strong><small>{caption}</small></article>)}</div>
+          </section>}
           {user?.role === 'admin' && <section className="panel admin-claims" id="admin-claims">
             <div className="panel-heading"><div><p className="eyebrow">STAFF REVIEW</p><h2>Pending ownership claims</h2></div><span className="admin-count">{claims.length}</span></div>
             {claims.length ? <div className="claim-list">{claims.map((claim) => <article className="claim-card" key={claim._id}>
