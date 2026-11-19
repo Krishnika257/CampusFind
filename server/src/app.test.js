@@ -192,6 +192,7 @@ describe('CampusFind API', () => {
     expect(sent.status).toBe(201);
     expect(sent.body.message).toMatchObject({ sender: 'student-1', text: 'I think this might be my water bottle.' });
     expect(visibleToOwner.body.messages).toHaveLength(1);
+    expect(models.notifications[0]).toMatchObject({ user: 'owner-1', type: 'message', conversation: 'conversation-1' });
   });
 
   it('notifies the owner when a newly posted item is a likely match', async () => {
@@ -225,7 +226,7 @@ describe('CampusFind API', () => {
       { type: 'found', status: 'open' },
       { type: 'found', status: 'claimed' },
     );
-    models.claims.push({ status: 'pending' });
+    models.claims.push({ status: 'pending' }, { status: 'approved' }, { status: 'rejected' });
     models.users.push({ id: 'student-1' }, { id: 'admin-1' });
     const studentToken = jwt.sign({ role: 'student' }, secret, { subject: 'student-1', expiresIn: '1h' });
     const adminToken = jwt.sign({ role: 'admin' }, secret, { subject: 'admin-1', expiresIn: '1h' });
@@ -234,7 +235,7 @@ describe('CampusFind API', () => {
     const allowed = await request(app).get('/api/admin/stats').set('Authorization', `Bearer ${adminToken}`);
 
     expect(forbidden.status).toBe(403);
-    expect(allowed.body.stats).toEqual({ totalItems: 3, openLost: 1, openFound: 1, returnedItems: 1, pendingClaims: 1, totalUsers: 2 });
+    expect(allowed.body.stats).toEqual({ totalItems: 3, openLost: 1, openFound: 1, returnedItems: 1, pendingClaims: 1, totalUsers: 2, approvedClaims: 1, rejectedClaims: 1, claimApprovalRate: 50 });
   });
 
   it('only allows the owner to edit a listing', async () => {

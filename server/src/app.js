@@ -229,13 +229,25 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
       conversation.lastMessage = text.slice(0, 300);
       conversation.lastMessageAt = createdAt;
       await conversation.save();
+      const recipient = conversation.participants.find((participant) => participant.toString() !== request.userId);
+      if (recipient) await safelyCreateNotification({
+        user: recipient,
+        type: 'message',
+        title: 'New private message',
+        message: 'There is a new message in your conversation about a campus listing.',
+        item: conversation.item,
+        conversation: conversation.id || conversation._id,
+      });
       return response.status(201).json({ message });
     } catch (error) { return next(error); }
   });
 
   app.get('/api/notifications', requireAuth, async (request, response, next) => {
     try {
-      const notifications = await Notification.find({ user: request.userId }).sort({ createdAt: -1 }).limit(50).populate('item', 'title type status');
+      const notifications = await Notification.find({ user: request.userId }).sort({ createdAt: -1 }).limit(50).populate([
+        { path: 'item', select: 'title type status' },
+        { path: 'conversation', select: 'item participants', populate: [{ path: 'item', select: 'title' }, { path: 'participants', select: 'name' }] },
+      ]);
       return response.json({ notifications });
     } catch (error) { return next(error); }
   });
@@ -267,15 +279,19 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
 
   app.get('/api/admin/stats', requireAuth, requireAdmin, async (_request, response, next) => {
     try {
-      const [totalItems, openLost, openFound, returnedItems, pendingClaims, totalUsers] = await Promise.all([
+      const [totalItems, openLost, openFound, returnedItems, pendingClaims, totalUsers, approvedClaims, rejectedClaims] = await Promise.all([
         Item.countDocuments({}),
         Item.countDocuments({ type: 'lost', status: 'open' }),
         Item.countDocuments({ type: 'found', status: 'open' }),
         Item.countDocuments({ status: 'claimed' }),
         Claim.countDocuments({ status: 'pending' }),
         User.countDocuments({}),
+        Claim.countDocuments({ status: 'approved' }),
+        Claim.countDocuments({ status: 'rejected' }),
       ]);
-      return response.json({ stats: { totalItems, openLost, openFound, returnedItems, pendingClaims, totalUsers } });
+      const reviewedClaims = approvedClaims + rejectedClaims;
+      const claimApprovalRate = reviewedClaims ? Math.round((approvedClaims / reviewedClaims) * 100) : 0;
+      return response.json({ stats: { totalItems, openLost, openFound, returnedItems, pendingClaims, totalUsers, approvedClaims, rejectedClaims, claimApprovalRate } });
     } catch (error) { return next(error); }
   });
 

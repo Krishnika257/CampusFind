@@ -218,6 +218,13 @@ export default function App() {
       } catch { /* Keep the notification available if marking it read fails. */ }
     }
     setShowNotifications(false);
+    if (notification.conversation) {
+      const conversationId = notification.conversation._id || notification.conversation;
+      const latestConversations = await loadConversations();
+      const conversation = latestConversations.find((entry) => String(entry._id || entry.id) === String(conversationId));
+      if (conversation) await openConversation(conversation);
+      return;
+    }
     if (notification.item?._id) showDetails(notification.item);
   }
 
@@ -316,7 +323,7 @@ export default function App() {
         <div className="dashboard-content">
           <header className="topbar">
             <a className="brand" href="/" aria-label="CampusFind home"><span className="brand-mark"><CampusFindMark /></span><span>Campus<span className="brand-accent">Find</span></span></a>
-            <div className="account-area"><span className="campus-chip"><span className="campus-dot" /> JIIT · NOIDA CAMPUS</span>{user && <div className="notification-area"><button className="notification-toggle" type="button" aria-label={`Notifications, ${notifications.filter((entry) => !entry.isRead).length} unread`} aria-expanded={showNotifications} onClick={() => setShowNotifications((visible) => !visible)}><span aria-hidden="true">🔔</span>{notifications.some((entry) => !entry.isRead) && <i aria-hidden="true" />}</button>{showNotifications && <section className="notification-popover" aria-label="Notifications"><div className="notification-popover-heading"><strong>Notifications</strong>{notifications.some((entry) => !entry.isRead) && <button type="button" onClick={markAllNotificationsRead}>Mark all read</button>}</div>{notifications.length ? notifications.slice(0, 8).map((notification) => <button className={`notification-row ${notification.isRead ? '' : 'unread'}`} type="button" key={notification._id || notification.id} onClick={() => openNotification(notification)}><span className="notification-symbol" aria-hidden="true">{notification.type === 'match' ? '⌕' : '✓'}</span><span><strong>{notification.title}</strong><small>{notification.message}</small></span></button>) : <p className="notification-empty">You’re all caught up.</p>}</section>}</div>}<button className="theme-toggle" type="button" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span></button>{user ? <><span className="welcome">Hi, {user.name}</span><button className="text-button" onClick={signOut}>Sign out</button></> : <span className="campus-label">Welcome to your campus board</span>}</div>
+            <div className="account-area"><span className="campus-chip"><span className="campus-dot" /> JIIT · NOIDA CAMPUS</span>{user && <div className="notification-area"><button className="notification-toggle" type="button" aria-label={`Notifications, ${notifications.filter((entry) => !entry.isRead).length} unread`} aria-expanded={showNotifications} onClick={() => setShowNotifications((visible) => !visible)}><span aria-hidden="true">🔔</span>{notifications.some((entry) => !entry.isRead) && <i aria-hidden="true" />}</button>{showNotifications && <section className="notification-popover" aria-label="Notifications"><div className="notification-popover-heading"><strong>Notifications</strong>{notifications.some((entry) => !entry.isRead) && <button type="button" onClick={markAllNotificationsRead}>Mark all read</button>}</div>{notifications.length ? notifications.slice(0, 8).map((notification) => <button className={`notification-row ${notification.isRead ? '' : 'unread'}`} type="button" key={notification._id || notification.id} onClick={() => openNotification(notification)}><span className="notification-symbol" aria-hidden="true">{notification.type === 'match' ? '⌕' : notification.type === 'message' ? '✉' : '✓'}</span><span><strong>{notification.title}</strong><small>{notification.message}</small></span></button>) : <p className="notification-empty">You’re all caught up.</p>}</section>}</div>}<button className="theme-toggle" type="button" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span></button>{user ? <><span className="welcome">Hi, {user.name}</span><button className="text-button" onClick={signOut}>Sign out</button></> : <span className="campus-label">Welcome to your campus board</span>}</div>
           </header>
 
           <section className="hero compact-hero" aria-labelledby="hero-title">
@@ -369,6 +376,7 @@ export default function App() {
               ['Returned', adminStats?.returnedItems, 'Marked as claimed'],
               ['Pending claims', adminStats?.pendingClaims, 'Need staff review'],
               ['Campus members', adminStats?.totalUsers, 'Registered accounts'],
+              ['Claim approval rate', adminStats ? `${adminStats.claimApprovalRate}%` : undefined, `${adminStats?.approvedClaims || 0} approved · ${adminStats?.rejectedClaims || 0} rejected`],
             ].map(([label, value, caption]) => <article className="admin-stat-card" key={label}><span>{label}</span><strong>{value ?? '—'}</strong><small>{caption}</small></article>)}</div>
           </section>}
           {user?.role === 'admin' && <section className="panel admin-claims" id="admin-claims">
