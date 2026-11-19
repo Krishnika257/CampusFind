@@ -44,10 +44,11 @@ const messageSchema = new mongoose.Schema({
 
 const notificationSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-  type: { type: String, enum: ['match', 'claim-approved', 'claim-rejected'], required: true },
+  type: { type: String, enum: ['match', 'message', 'claim-approved', 'claim-rejected'], required: true },
   title: { type: String, required: true, trim: true, maxlength: 120 },
   message: { type: String, required: true, trim: true, maxlength: 300 },
   item: { type: mongoose.Schema.Types.ObjectId, ref: 'Item' },
+  conversation: { type: mongoose.Schema.Types.ObjectId, ref: 'Conversation' },
   isRead: { type: Boolean, default: false },
 }, { timestamps: true });
 
