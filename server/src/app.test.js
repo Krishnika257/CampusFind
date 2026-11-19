@@ -116,15 +116,28 @@ describe('CampusFind API', () => {
     expect(models.users).toHaveLength(0);
   });
 
+  it.each([
+    ['malformed email', { name: 'Riley', email: 'not-an-email', password: 'campus-pass-123' }],
+    ['overlong name', { name: 'R'.repeat(81), email: 'riley@jiit.ac.in', password: 'campus-pass-123' }],
+    ['password over bcrypt byte limit', { name: 'Riley', email: 'riley@jiit.ac.in', password: 'a'.repeat(73) }],
+    ['non-string credentials', { name: 'Riley', email: 'riley@jiit.ac.in', password: { value: 'campus-pass-123' } }],
+  ])('rejects registration with %s', async (_description, body) => {
+    const response = await request(app).post('/api/auth/register').send(body);
+    expect(response.status).toBe(400);
+    expect(models.users).toHaveLength(0);
+  });
+
   it('logs in with the normalized email and rejects an incorrect password', async () => {
     const passwordHash = await bcrypt.hash('campus-pass-123', 4);
     models.users.push({ id: 'user-1', name: 'Riley', email: 'riley@jiit.ac.in', passwordHash });
 
     const success = await request(app).post('/api/auth/login').send({ email: ' RILEY@JIIT.AC.IN ', password: 'campus-pass-123' });
     const failure = await request(app).post('/api/auth/login').send({ email: 'riley@jiit.ac.in', password: 'wrong-pass' });
+    const oversizedPassword = await request(app).post('/api/auth/login').send({ email: 'riley@jiit.ac.in', password: `${'campus-pass-123'}${'x'.repeat(60)}` });
     expect(success.status).toBe(200);
     expect(jwt.verify(success.body.token, secret).sub).toBe('user-1');
     expect(failure.status).toBe(401);
+    expect(oversizedPassword.status).toBe(401);
   });
 
   it('requires a valid JWT before accepting an item post', async () => {

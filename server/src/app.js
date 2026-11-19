@@ -59,13 +59,17 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
 
   app.post('/api/auth/register', async (request, response, next) => {
     try {
-      const { name, email, password } = request.body;
-      if (!name?.trim() || !email?.trim() || !password) return response.status(400).json({ message: 'Name, email, and password are required.' });
+      const { name, email, password } = request.body || {};
+      const normalizedName = typeof name === 'string' ? name.trim() : '';
+      const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+      if (!normalizedName || !normalizedEmail || typeof password !== 'string' || !password) return response.status(400).json({ message: 'Name, email, and password are required.' });
+      if (normalizedName.length > 80) return response.status(400).json({ message: 'Name must be 80 characters or fewer.' });
+      if (normalizedEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) return response.status(400).json({ message: 'Enter a valid email address.' });
       if (password.length < 8) return response.status(400).json({ message: 'Password must be at least 8 characters.' });
-      const normalizedEmail = email.trim().toLowerCase();
+      if (Buffer.byteLength(password, 'utf8') > 72) return response.status(400).json({ message: 'Password must be no longer than 72 bytes.' });
       if (await User.exists({ email: normalizedEmail })) return response.status(409).json({ message: 'An account with that email already exists.' });
       const role = 'student';
-      const user = await User.create({ name: name.trim(), email: normalizedEmail, role, passwordHash: await bcrypt.hash(password, 12) });
+      const user = await User.create({ name: normalizedName, email: normalizedEmail, role, passwordHash: await bcrypt.hash(password, 12) });
       const token = jwt.sign({ role: user.role }, jwtSecret, { subject: user.id, expiresIn: '7d' });
       return response.status(201).json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
     } catch (error) { return next(error); }
@@ -73,8 +77,11 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
 
   app.post('/api/auth/login', async (request, response, next) => {
     try {
-      const user = await User.findOne({ email: request.body.email?.trim().toLowerCase() });
-      if (!user || !(await bcrypt.compare(request.body.password || '', user.passwordHash))) return response.status(401).json({ message: 'Email or password is incorrect.' });
+      const { email, password } = request.body || {};
+      const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+      const validPassword = typeof password === 'string' && Buffer.byteLength(password, 'utf8') <= 72;
+      const user = await User.findOne({ email: normalizedEmail });
+      if (!user || !validPassword || !(await bcrypt.compare(password, user.passwordHash))) return response.status(401).json({ message: 'Email or password is incorrect.' });
       const role = user.role || 'student';
       const token = jwt.sign({ role }, jwtSecret, { subject: user.id, expiresIn: '7d' });
       return response.json({ token, user: { id: user.id, name: user.name, email: user.email, role } });
