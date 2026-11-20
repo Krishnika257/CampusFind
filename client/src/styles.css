@@ -482,11 +482,15 @@ html[data-theme="dark"] .button-primary:hover { background: #6966c8; }
 .match-card h4 { margin: 7px 0 3px; color: #393751; font: 700 14px 'Manrope', sans-serif; }
 .match-card p { margin: 0 0 4px; color: #6c6a80; font-size: 11px; }
 .match-card small { color: #88869a; font-size: 10px; }
+.match-view-button { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; padding: 0; border: 0; color: #514fa9; background: transparent; cursor: pointer; font: 700 11px 'Manrope', sans-serif; }
+.match-view-button:hover { color: #38367d; text-decoration: underline; }
 .match-score { display: grid; flex: 0 0 42px; width: 42px; height: 42px; place-items: center; border-radius: 50%; color: #31764c; background: #e3f3e8; font-size: 11px; font-weight: 800; }
 .match-empty { margin: 0; color: #858399; font-size: 12px; line-height: 1.6; }
 html[data-theme="dark"] .match-suggestions { border-color: #444353; }
 html[data-theme="dark"] .match-heading h3, html[data-theme="dark"] .match-card h4 { color: #efedf8; }
 html[data-theme="dark"] .match-heading > span, html[data-theme="dark"] .match-card p, html[data-theme="dark"] .match-card small, html[data-theme="dark"] .match-empty { color: #b8b6c8; }
+html[data-theme="dark"] .match-view-button { color: #b6b2ff; }
+html[data-theme="dark"] .match-view-button:hover { color: #d2cfff; }
 html[data-theme="dark"] .match-card { border-color: #454556; background: #292a37; }
 html[data-theme="dark"] .match-score { color: #aee4ba; background: #304a37; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 22px; }
