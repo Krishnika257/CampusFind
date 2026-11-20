@@ -11,6 +11,7 @@
     "dev": "concurrently \"npm run dev --workspace client\" \"npm run dev --workspace server\"",
     "dev:client": "npm run dev --workspace client",
     "dev:server": "npm run dev --workspace server",
+    "seed:demo": "npm run seed:demo --workspace server",
     "test": "vitest run",
     "test:watch": "vitest",
     "test": "vitest run",
