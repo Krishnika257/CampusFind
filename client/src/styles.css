@@ -310,6 +310,39 @@ footer { margin: 26px 0 14px; color: #9998a9; font-size: 11px; }
 .post-panel { border-color: #e2e0f4; background: linear-gradient(155deg, #f2f1ff 0%, #fff 36%); }
 .post-panel .panel-icon { color: #4d4a9d; background: #e5e3ff; }
 .post-panel .form-stack input, .post-panel .form-stack select, .post-panel .form-stack textarea { background: #fff; }
+.topbar-auth-actions { display: flex; align-items: center; gap: 13px; }
+.topbar-auth-link { padding: 8px 3px; border: 0; color: #514fa9; background: transparent; cursor: pointer; font: 700 13px 'Manrope', sans-serif; }
+.topbar-auth-link:hover { color: #39377d; text-decoration: underline; }
+.topbar-register-button { width: auto; min-height: 38px; padding: 8px 14px; font-size: 12px; }
+.post-signin-gate { display: grid; gap: 13px; }
+.post-signin-gate > p { margin: 0 0 4px; color: #6f7085; font-size: 14px; line-height: 1.65; }
+.post-create-account { justify-self: center; font-size: 12px; }
+.auth-page { width: min(100% - 32px, 620px); margin: 28px auto 34px; }
+.auth-page-card { max-width: 480px; margin: 22px auto 0; padding: clamp(24px, 5vw, 42px); border: 1px solid #e1dff2; border-radius: 20px; background: linear-gradient(145deg, #f7f6ff 0%, #fff 55%); box-shadow: 0 16px 42px #34315a12; }
+.auth-page-mark { display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: 22px; border-radius: 16px; color: #fff; background: linear-gradient(145deg, #6865c5, #494796); }
+.auth-page-mark svg { width: 36px; height: 36px; }
+.auth-page-card > .eyebrow { margin: 0 0 8px; color: #625eae; font-size: 10px; letter-spacing: 1.5px; }
+.auth-page-card h2 { margin: 0; color: #25233f; font: 800 clamp(27px, 5vw, 34px) 'Manrope', sans-serif; letter-spacing: -1px; }
+.auth-page-intro { margin: 10px 0 24px; color: #77758c; font-size: 14px; line-height: 1.6; }
+.auth-page-form { gap: 16px; }
+.auth-page-form label { font-size: 13px; }
+.auth-page-form input { min-height: 46px; border-radius: 9px; font-size: 14px; }
+html[data-theme="dark"] .topbar-auth-link { color: #c4c1ff; }
+html[data-theme="dark"] .topbar-auth-link:hover { color: #e2e0ff; }
+html[data-theme="dark"] .post-signin-gate > p { color: #c3c1d0; }
+html[data-theme="dark"] .auth-page-card { border-color: #414055; background: linear-gradient(145deg, #29283f 0%, #23232f 55%); }
+html[data-theme="dark"] .auth-page-card h2 { color: #f0eef9; }
+html[data-theme="dark"] .auth-page-intro { color: #b6b4c6; }
+html[data-theme="dark"] .auth-page-form label { color: #dedce8; }
+html[data-theme="dark"] .auth-page-form input { border-color: #4a4959; color: #efedf8; background: #2d2d39; }
+@media (max-width: 850px) { .topbar-auth-actions .campus-label { display: none; } }
+@media (max-width: 650px) {
+  .topbar-auth-actions { gap: 7px; }
+  .topbar-auth-link { padding: 7px 1px; font-size: 12px; }
+  .topbar-register-button { min-height: 34px; padding: 7px 9px; font-size: 10px; }
+  .auth-page { width: min(100% - 12px, 620px); margin: 18px auto 28px; }
+  .auth-page-card { margin-top: 17px; border-radius: 16px; }
+}
 .listings-panel { border-color: #dcebe2; background: linear-gradient(155deg, #edf8f1 0%, #fff 34%); }
 .listings-panel .panel-heading .eyebrow { color: #4c9470; }
 .listings-panel .board-summary { border: 1px solid #e0eee5; color: #527565; background: #f3faf5; }
