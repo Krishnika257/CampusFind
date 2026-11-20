@@ -95,6 +95,32 @@ describe('CampusFind board', () => {
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/my/items?page=1&limit=12'), expect.objectContaining({ headers: { Authorization: 'Bearer student-token' } }));
   });
 
+  it('lets a student track claim decisions and staff notes in My Claims', async () => {
+    localStorage.setItem('campusfind-user', JSON.stringify({ id: 'claimant-1', name: 'Riley', role: 'student' }));
+    localStorage.setItem('campusfind-token', 'student-token');
+    const claimHistory = [
+      { _id: 'claim-pending', status: 'pending', proof: 'There is a small scratch beneath the handle.', item: { _id: 'found-pending', title: 'Green umbrella', type: 'found', location: 'Cafe' } },
+      { _id: 'claim-rejected', status: 'rejected', proof: 'A unique mark is inside the cover.', adminNotes: 'Please provide another identifying detail.', item: { _id: 'found-rejected', title: 'Blue notebook', type: 'found', location: 'Library' } },
+    ];
+    const fetchMock = vi.fn().mockImplementation(async (url) => {
+      const parsed = new URL(String(url), 'http://localhost');
+      if (parsed.pathname.endsWith('/my/claims')) return { ok: true, json: async () => ({ claims: claimHistory, pagination: { page: 1, limit: 12, total: 2, pages: 1 } }) };
+      if (parsed.pathname.endsWith('/items')) return { ok: true, json: async () => ({ items: [], pagination: { page: 1, limit: 12, total: 0, pages: 0 } }) };
+      if (parsed.pathname.endsWith('/notifications')) return { ok: true, json: async () => ({ notifications: [], unreadCount: 0 }) };
+      return { ok: true, json: async () => ({ conversations: [] }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'My claims' }));
+    expect(await screen.findByRole('heading', { name: 'My claims' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Green umbrella' })).toBeInTheDocument();
+    expect(screen.getByText('Pending review')).toBeInTheDocument();
+    expect(screen.getByText('Not approved')).toBeInTheDocument();
+    expect(screen.getByText('Please provide another identifying detail.')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/my/claims?page=1&limit=12'), expect.objectContaining({ headers: { Authorization: 'Bearer student-token' } }));
+  });
+
   it('toggles dark mode and remembers the selected theme', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ items: [] }) }));
     render(<App />);
@@ -310,8 +336,9 @@ describe('CampusFind board', () => {
     expect(screen.getByText('Campus members')).toBeInTheDocument();
     expect(screen.getByText('75%')).toBeInTheDocument();
     expect(await screen.findByText('A small tear is inside the left pocket.')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Staff note for Green umbrella'), { target: { value: 'Please share one more identifying detail.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Approve & mark returned' }));
     expect(await screen.findByText('All caught up')).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/admin/claims/claim-1'), expect.objectContaining({ method: 'PATCH' }));
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/admin/claims/claim-1'), expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ status: 'approved', adminNotes: 'Please share one more identifying detail.' }) }));
   });
 });
