@@ -19,6 +19,7 @@ export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem('campusfind-token') || '');
   const [mode, setMode] = useState('login');
   const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
+  const [showAuthPage, setShowAuthPage] = useState(false);
   const [itemForm, setItemForm] = useState(emptyItem);
   const [theme, setTheme] = useState(() => localStorage.getItem('campusfind-theme') || 'light');
   const [items, setItems] = useState([]);
@@ -128,9 +129,19 @@ export default function App() {
   }
 
   function returnToBoard() {
+    setShowAuthPage(false);
     setShowMyListings(false);
     setShowMyClaims(false);
     setShowNotificationHistory(false);
+  }
+
+  function openAuthPage(nextMode = 'login') {
+    setMode(nextMode);
+    setShowMyListings(false);
+    setShowMyClaims(false);
+    setShowNotificationHistory(false);
+    setShowNotifications(false);
+    setShowAuthPage(true);
   }
 
   useEffect(() => {
@@ -187,7 +198,7 @@ export default function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not sign in.');
       localStorage.setItem('campusfind-token', data.token); localStorage.setItem('campusfind-user', JSON.stringify(data.user));
-      setToken(data.token); setUser(data.user); setAuthForm({ name: '', email: '', password: '' }); setMessage('You’re signed in.');
+      setToken(data.token); setUser(data.user); setAuthForm({ name: '', email: '', password: '' }); setShowAuthPage(false); setMessage('You’re signed in.');
     } catch (error) { setMessage(error.message); }
   }
 
@@ -439,13 +450,13 @@ export default function App() {
       <div className="dashboard-frame">
         <aside className="nav-rail" aria-label="CampusFind navigation">
           <a className="rail-logo" href="/" aria-label="CampusFind home"><CampusFindMark /></a>
-          <div className="rail-links"><a className={`rail-link ${!showMyListings && !showMyClaims && !showNotificationHistory ? 'active' : ''}`} href="#board" onClick={returnToBoard} aria-label="Campus board">⌂</a><a className="rail-link" href="#post" onClick={returnToBoard} aria-label="Post an item">＋</a><a className="rail-link" href="#updates" onClick={returnToBoard} aria-label="Updates">◷</a>{user && <><button className={`rail-link ${showMyListings ? 'active' : ''}`} type="button" onClick={openMyListings} aria-label="My listings">▤</button><button className={`rail-link ${showMyClaims ? 'active' : ''}`} type="button" onClick={openMyClaims} aria-label="My claims">✓</button><a className="rail-link" href="#messages" onClick={returnToBoard} aria-label="Messages">✉</a></>}</div>
-          <div className="rail-bottom"><span className="rail-avatar">{user?.name?.[0]?.toUpperCase() || 'G'}</span><button className="rail-link rail-exit" onClick={user ? signOut : () => { setMode('login'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} aria-label={user ? 'Sign out' : 'Sign in'}>{user ? '↗' : '→'}</button></div>
+          <div className="rail-links"><a className={`rail-link ${!showAuthPage && !showMyListings && !showMyClaims && !showNotificationHistory ? 'active' : ''}`} href="#board" onClick={returnToBoard} aria-label="Campus board">⌂</a><a className="rail-link" href="#post" onClick={returnToBoard} aria-label="Post an item">＋</a><a className="rail-link" href="#updates" onClick={returnToBoard} aria-label="Updates">◷</a>{user && <><button className={`rail-link ${showMyListings ? 'active' : ''}`} type="button" onClick={openMyListings} aria-label="My listings">▤</button><button className={`rail-link ${showMyClaims ? 'active' : ''}`} type="button" onClick={openMyClaims} aria-label="My claims">✓</button><a className="rail-link" href="#messages" onClick={returnToBoard} aria-label="Messages">✉</a></>}</div>
+          <div className="rail-bottom"><span className="rail-avatar">{user?.name?.[0]?.toUpperCase() || 'G'}</span><button className="rail-link rail-exit" onClick={user ? signOut : () => openAuthPage('login')} aria-label={user ? 'Sign out' : 'Sign in'}>{user ? '↗' : '→'}</button></div>
         </aside>
         <div className="dashboard-content">
           <header className="topbar">
             <a className="brand" href="/" aria-label="CampusFind home"><span className="brand-mark"><CampusFindMark /></span><span>Campus<span className="brand-accent">Find</span></span></a>
-            <div className="account-area"><span className="campus-chip"><span className="campus-dot" /> JIIT · NOIDA CAMPUS</span>{user && <div className="notification-area"><button className="notification-toggle" type="button" aria-label={`Notifications, ${notificationUnreadCount} unread`} aria-expanded={showNotifications} onClick={() => setShowNotifications((visible) => !visible)}><span aria-hidden="true">🔔</span>{notificationUnreadCount > 0 && <i aria-hidden="true" />}</button>{showNotifications && <section className="notification-popover" aria-label="Notifications"><div className="notification-popover-heading"><strong>Notifications</strong>{notificationUnreadCount > 0 && <button type="button" onClick={markAllNotificationsRead}>Mark all read</button>}</div>{notifications.length ? notifications.slice(0, 8).map((notification) => <button className={`notification-row ${notification.isRead ? '' : 'unread'}`} type="button" key={notification._id || notification.id} onClick={() => openNotification(notification)}><span className="notification-symbol" aria-hidden="true">{notification.type === 'match' ? '⌕' : notification.type === 'message' ? '✉' : '✓'}</span><span><strong>{notification.title}</strong><small>{notification.message}</small></span></button>) : <p className="notification-empty">You’re all caught up.</p>}<button className="notification-history-link" type="button" onClick={openNotificationHistory}>View notification history <span aria-hidden="true">→</span></button></section>}</div>}<button className="theme-toggle" type="button" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span></button>{user ? <><span className="welcome">Hi, {user.name}</span><button className="text-button" onClick={signOut}>Sign out</button></> : <span className="campus-label">Welcome to your campus board</span>}</div>
+            <div className="account-area"><span className="campus-chip"><span className="campus-dot" /> JIIT · NOIDA CAMPUS</span>{user && <div className="notification-area"><button className="notification-toggle" type="button" aria-label={`Notifications, ${notificationUnreadCount} unread`} aria-expanded={showNotifications} onClick={() => setShowNotifications((visible) => !visible)}><span aria-hidden="true">🔔</span>{notificationUnreadCount > 0 && <i aria-hidden="true" />}</button>{showNotifications && <section className="notification-popover" aria-label="Notifications"><div className="notification-popover-heading"><strong>Notifications</strong>{notificationUnreadCount > 0 && <button type="button" onClick={markAllNotificationsRead}>Mark all read</button>}</div>{notifications.length ? notifications.slice(0, 8).map((notification) => <button className={`notification-row ${notification.isRead ? '' : 'unread'}`} type="button" key={notification._id || notification.id} onClick={() => openNotification(notification)}><span className="notification-symbol" aria-hidden="true">{notification.type === 'match' ? '⌕' : notification.type === 'message' ? '✉' : '✓'}</span><span><strong>{notification.title}</strong><small>{notification.message}</small></span></button>) : <p className="notification-empty">You’re all caught up.</p>}<button className="notification-history-link" type="button" onClick={openNotificationHistory}>View notification history <span aria-hidden="true">→</span></button></section>}</div>}<button className="theme-toggle" type="button" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span></button>{user ? <><span className="welcome">Hi, {user.name}</span><button className="text-button" onClick={signOut}>Sign out</button></> : <div className="topbar-auth-actions"><span className="campus-label">Welcome to your campus board</span><button className="topbar-auth-link" type="button" onClick={() => openAuthPage('login')}>Sign in</button><button className="button button-primary topbar-register-button" type="button" onClick={() => openAuthPage('register')}>Create account</button></div>}</div>
           </header>
 
           <section className="hero compact-hero" aria-labelledby="hero-title">
@@ -454,26 +465,18 @@ export default function App() {
           </section>
           {message && <p className="notice" role="status">{message}</p>}
 
-          <div className={showNotificationHistory || showMyListings || showMyClaims ? 'dashboard-main-view is-hidden' : 'dashboard-main-view'}>
+          <div className={showAuthPage || showNotificationHistory || showMyListings || showMyClaims ? 'dashboard-main-view is-hidden' : 'dashboard-main-view'}>
           <div className="content-grid" id="board">
             <section className="panel post-panel" id="post">
-              <div className="panel-heading"><div><p className="eyebrow">QUICK ACTION</p><h2>{user ? 'Post an item' : mode === 'login' ? 'Welcome back' : 'Create your account'}</h2></div><span className="panel-icon">✎</span></div>
-              {!user ? <>
-                <form className="form-stack" onSubmit={submitAuth}>
-                  {mode === 'register' && <label>Your name<input required maxLength="80" autoComplete="name" value={authForm.name} onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })} /></label>}
-                  <label>College email<input required type="email" maxLength="254" autoComplete="email" value={authForm.email} onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })} /></label>
-                  <label>Password<input required type="password" minLength="8" maxLength="72" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={authForm.password} onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })} /><small>8 characters minimum; 72 bytes maximum</small></label>
-                  <button className="button button-primary full-button" type="submit">{mode === 'login' ? 'Sign in' : 'Create account'} <span aria-hidden="true">→</span></button>
-                </form>
-                <p className="switch-mode">{mode === 'login' ? 'New to CampusFind?' : 'Already have an account?'} <button className="text-button" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>{mode === 'login' ? 'Create an account' : 'Sign in'}</button></p>
-              </> : <form className="form-stack" onSubmit={submitItem}>
+              <div className="panel-heading"><div><p className="eyebrow">QUICK ACTION</p><h2>{user ? 'Post an item' : 'Sign in to post'}</h2></div><span className="panel-icon">✎</span></div>
+              {user ? <form className="form-stack" onSubmit={submitItem}>
       <div className="type-toggle" aria-label="Listing type">{['lost', 'found'].map((type) => <button key={type} type="button" className={itemForm.type === type ? 'selected' : ''} onClick={() => setItemForm({ ...itemForm, type })}>I {type} something</button>)}</div>
                 <label>Item name<input required maxLength="100" placeholder="e.g. Blue water bottle" value={itemForm.title} onChange={(e) => setItemForm({ ...itemForm, title: e.target.value })} /></label>
                 <label>Category<select value={itemForm.category} onChange={(e) => setItemForm({ ...itemForm, category: e.target.value })}>{['Electronics', 'Books', 'Clothing', 'Accessories', 'Other'].map((category) => <option key={category}>{category}</option>)}</select></label>
                 <label>Location<input required maxLength="120" placeholder="e.g. Library, second floor" value={itemForm.location} onChange={(e) => setItemForm({ ...itemForm, location: e.target.value })} /></label>
                 <label>Description<textarea required maxLength="1000" rows="3" placeholder="Add details that may help identify the item" value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} /></label>
                 <button className="button button-primary full-button" type="submit">Post listing <span aria-hidden="true">→</span></button>
-              </form>}
+              </form> : <div className="post-signin-gate"><p>Sign in or create a free account to share a lost or found item with the campus.</p><button className="button button-primary full-button" type="button" onClick={() => openAuthPage('login')}>Sign in to continue <span aria-hidden="true">→</span></button><button className="text-button post-create-account" type="button" onClick={() => openAuthPage('register')}>New to CampusFind? Create an account</button></div>}
             </section>
 
             <section className="panel listings-panel" id="updates">
@@ -519,6 +522,22 @@ export default function App() {
             </button>)}</div> : <div className="empty-state messages-empty"><span aria-hidden="true">✉</span><h3>No conversations yet</h3><p>Open a listing and choose “Message poster” to privately contact its owner.</p></div>}
           </section>}
           </div>
+          {showAuthPage && !user && <section className="auth-page" aria-labelledby="auth-page-title">
+            <button className="history-back-button" type="button" onClick={returnToBoard}>← Back to campus board</button>
+            <div className="auth-page-card">
+              <span className="auth-page-mark"><CampusFindMark /></span>
+              <p className="eyebrow">YOUR CAMPUS COMMUNITY</p>
+              <h2 id="auth-page-title">{mode === 'login' ? 'Welcome back' : 'Join CampusFind'}</h2>
+              <p className="auth-page-intro">{mode === 'login' ? 'Sign in to post an item, manage your listings, and stay connected.' : 'Create an account to help lost items find their way home.'}</p>
+              <form className="form-stack auth-page-form" onSubmit={submitAuth}>
+                {mode === 'register' && <label>Your name<input required maxLength="80" autoComplete="name" value={authForm.name} onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })} /></label>}
+                <label>College email<input required type="email" maxLength="254" autoComplete="email" value={authForm.email} onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })} /></label>
+                <label>Password<input required type="password" minLength="8" maxLength="72" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={authForm.password} onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })} /><small>8 characters minimum; 72 bytes maximum</small></label>
+                <button className="button button-primary full-button" type="submit">{mode === 'login' ? 'Sign in' : 'Create account'} <span aria-hidden="true">→</span></button>
+              </form>
+              <p className="switch-mode">{mode === 'login' ? 'New to CampusFind?' : 'Already have an account?'} <button className="text-button" type="button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setAuthForm({ name: '', email: '', password: '' }); }}>{mode === 'login' ? 'Create an account' : 'Sign in'}</button></p>
+            </div>
+          </section>}
           {showMyClaims && user && <section className="panel my-claims-page" aria-labelledby="my-claims-title">
             <button className="history-back-button" type="button" onClick={returnToBoard}>← Back to campus board</button>
             <div className="my-claims-heading"><div><p className="eyebrow">OWNERSHIP REQUESTS</p><h2 id="my-claims-title">My claims</h2><p>Track each claim and read the campus staff’s review notes.</p></div><div className="my-listings-heading-actions"><span className="my-listings-count">{myClaimsPagination.total} total</span><button className="button button-secondary" type="button" onClick={() => loadMyClaims(myClaimsPage)} disabled={myClaimsLoading}>Refresh</button></div></div>

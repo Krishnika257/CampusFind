@@ -20,6 +20,36 @@ describe('CampusFind board', () => {
     expect(await screen.findByText('It starts with our community')).toBeInTheDocument();
   });
 
+  it('opens a dedicated sign-in page, offers registration, and returns to posting after login', async () => {
+    const signedInUser = { id: 'student-1', name: 'Riley', email: 'riley@jiit.ac.in', role: 'student' };
+    const fetchMock = vi.fn().mockImplementation(async (url) => {
+      const parsed = new URL(String(url), 'http://localhost');
+      if (parsed.pathname.endsWith('/auth/login')) return { ok: true, json: async () => ({ token: 'student-token', user: signedInUser }) };
+      if (parsed.pathname.endsWith('/items')) return { ok: true, json: async () => ({ items: [], pagination: { page: 1, pages: 0, total: 0, limit: 12 } }) };
+      if (parsed.pathname.endsWith('/notifications')) return { ok: true, json: async () => ({ notifications: [], unreadCount: 0 }) };
+      return { ok: true, json: async () => ({ conversations: [] }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+
+    fireEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Sign in', exact: true }));
+    let authPage = await screen.findByRole('region', { name: 'Welcome back' });
+    expect(within(authPage).getByRole('textbox', { name: 'College email' })).toBeInTheDocument();
+    fireEvent.click(within(authPage).getByRole('button', { name: 'Create an account' }));
+    authPage = await screen.findByRole('region', { name: 'Join CampusFind' });
+    expect(within(authPage).getByRole('textbox', { name: 'Your name' })).toBeInTheDocument();
+    fireEvent.click(within(authPage).getByRole('button', { name: 'Sign in' }));
+    authPage = await screen.findByRole('region', { name: 'Welcome back' });
+    fireEvent.change(within(authPage).getByRole('textbox', { name: 'College email' }), { target: { value: 'riley@jiit.ac.in' } });
+    fireEvent.change(within(authPage).getByLabelText(/^Password/), { target: { value: 'campus-pass-123' } });
+    fireEvent.click(within(authPage).getByRole('button', { name: /Sign in/ }));
+
+    expect(await screen.findByRole('heading', { name: 'Post an item' })).toBeInTheDocument();
+    expect(within(screen.getByRole('banner')).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Item name' })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/auth/login'), expect.objectContaining({ method: 'POST' }));
+  });
+
   it('sends keyword and category filters to the API', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ items: [] }) });
     vi.stubGlobal('fetch', fetchMock);
