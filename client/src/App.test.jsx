@@ -154,10 +154,12 @@ describe('CampusFind board', () => {
 
   it('shows ranked match suggestions in listing details', async () => {
     const listedItem = { _id: 'lost-1', title: 'Blue phone', description: 'Cracked case', category: 'Electronics', location: 'Library', type: 'lost', owner: { _id: 'owner-1', name: 'Riley' } };
-    const match = { item: { _id: 'found-1', title: 'Phone with blue case', category: 'Electronics', location: 'Library entrance', type: 'found' }, score: 84, reasons: ['Same category', 'Similar campus location'] };
+    const suggestedItem = { _id: 'found-1', title: 'Phone with blue case', description: 'Cracked blue case', category: 'Electronics', location: 'Library entrance', type: 'found', status: 'open', owner: { _id: 'owner-2', name: 'Ari' } };
+    const match = { item: suggestedItem, score: 84, reasons: ['Same category', 'Similar campus location'] };
     const fetchMock = vi.fn().mockImplementation(async (url) => {
       if (String(url).endsWith('/matches')) return { ok: true, json: async () => ({ matches: [match] }) };
       if (String(url).endsWith('/lost-1')) return { ok: true, json: async () => ({ item: listedItem }) };
+      if (String(url).endsWith('/found-1')) return { ok: true, json: async () => ({ item: suggestedItem }) };
       return { ok: true, json: async () => ({ items: [listedItem] }) };
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -168,6 +170,8 @@ describe('CampusFind board', () => {
     expect(await within(dialog).findByRole('heading', { name: 'Possible matches' })).toBeInTheDocument();
     expect(await within(dialog).findByText('Phone with blue case')).toBeInTheDocument();
     expect(within(dialog).getByText('84%')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'View listing: Phone with blue case' }));
+    expect(await screen.findByRole('heading', { level: 2, name: 'Phone with blue case' })).toBeInTheDocument();
   });
 
   it('lets a signed-in student start a private chat and send a message', async () => {

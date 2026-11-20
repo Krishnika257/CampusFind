@@ -569,7 +569,7 @@ export default function App() {
                 <section className="match-suggestions" aria-label="Possible matching listings">
                   <div className="match-heading"><h3>Possible matches</h3><span>Opposite listing type</span></div>
                   {matchesLoading ? <p className="match-empty">Looking for similar items…</p> : matchedItems.length ? <div className="match-list">{matchedItems.map(({ item, score, reasons }) => <article className="match-card" key={item._id}>
-                    <div><span className={`listing-type ${item.type}`}>{item.type === 'lost' ? 'Looking for' : 'Found on campus'}</span><h4>{item.title}</h4><p>{item.category} · {item.location}</p><small>{reasons.join(' · ')}</small></div><span className="match-score" title="Similarity score">{score}%</span>
+                    <div><span className={`listing-type ${item.type}`}>{item.type === 'lost' ? 'Looking for' : 'Found on campus'}</span><h4>{item.title}</h4><p>{item.category} · {item.location}</p><small>{reasons.join(' · ')}</small><button className="match-view-button" type="button" aria-label={`View listing: ${item.title}`} onClick={() => showDetails(item)}>View listing <span aria-hidden="true">→</span></button></div><span className="match-score" title="Similarity score">{score}%</span>
                   </article>)}</div> : <p className="match-empty">No close matches yet. We’ll show suggestions as similar listings are posted.</p>}
                 </section>
                 {user && selectedItem.type === 'found' && selectedItem.status === 'open' && !isItemOwner(selectedItem) && <div className="claim-action">
