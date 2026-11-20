@@ -30,6 +30,12 @@ export default function App() {
   const [myListingsPage, setMyListingsPage] = useState(1);
   const [myListingsLoading, setMyListingsLoading] = useState(false);
   const [myListingsError, setMyListingsError] = useState('');
+  const [showMyClaims, setShowMyClaims] = useState(false);
+  const [myClaims, setMyClaims] = useState([]);
+  const [myClaimsPagination, setMyClaimsPagination] = useState({ page: 1, pages: 0, total: 0, limit: 12 });
+  const [myClaimsPage, setMyClaimsPage] = useState(1);
+  const [myClaimsLoading, setMyClaimsLoading] = useState(false);
+  const [myClaimsError, setMyClaimsError] = useState('');
   const [filter, setFilter] = useState('all');
   const [searchFields, setSearchFields] = useState({ q: '', category: '', location: '', from: '', to: '' });
   const [message, setMessage] = useState('');
@@ -89,15 +95,40 @@ export default function App() {
     finally { setMyListingsLoading(false); }
   }
 
+  async function loadMyClaims(page = 1) {
+    setMyClaimsLoading(true);
+    setMyClaimsError('');
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: '12' });
+      const response = await fetch(`${API}/my/claims?${params}`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not load your claim history.');
+      setMyClaims(data.claims || []);
+      setMyClaimsPagination(data.pagination || { page, pages: 1, total: (data.claims || []).length, limit: 12 });
+      setMyClaimsPage(page);
+    } catch (error) { setMyClaimsError(error.message); }
+    finally { setMyClaimsLoading(false); }
+  }
+
   async function openMyListings() {
     setShowNotifications(false);
     setShowNotificationHistory(false);
+    setShowMyClaims(false);
     setShowMyListings(true);
     await loadMyListings(1);
   }
 
+  async function openMyClaims() {
+    setShowNotifications(false);
+    setShowNotificationHistory(false);
+    setShowMyListings(false);
+    setShowMyClaims(true);
+    await loadMyClaims(1);
+  }
+
   function returnToBoard() {
     setShowMyListings(false);
+    setShowMyClaims(false);
     setShowNotificationHistory(false);
   }
 
@@ -112,7 +143,7 @@ export default function App() {
 
   useEffect(() => {
     if (!user || !token) {
-      setNotifications([]); setNotificationHistory([]); setNotificationUnreadCount(0); setAdminStats(null); setShowNotificationHistory(false); setShowMyListings(false); setMyListings([]);
+      setNotifications([]); setNotificationHistory([]); setNotificationUnreadCount(0); setAdminStats(null); setShowNotificationHistory(false); setShowMyListings(false); setMyListings([]); setShowMyClaims(false); setMyClaims([]);
       return undefined;
     }
     const refreshAccountData = () => {
@@ -274,6 +305,7 @@ export default function App() {
   async function openNotificationHistory() {
     setShowNotifications(false);
     setShowMyListings(false);
+    setShowMyClaims(false);
     setHistoryFilter('all');
     setShowNotificationHistory(true);
     await loadNotificationHistory(1, 'all');
@@ -302,6 +334,7 @@ export default function App() {
     setShowNotifications(false);
     setShowNotificationHistory(false);
     setShowMyListings(false);
+    setShowMyClaims(false);
     if (notification.conversation) {
       const conversationId = notification.conversation._id || notification.conversation;
       const latestConversations = await loadConversations();
@@ -404,7 +437,7 @@ export default function App() {
       <div className="dashboard-frame">
         <aside className="nav-rail" aria-label="CampusFind navigation">
           <a className="rail-logo" href="/" aria-label="CampusFind home"><CampusFindMark /></a>
-          <div className="rail-links"><a className={`rail-link ${!showMyListings && !showNotificationHistory ? 'active' : ''}`} href="#board" onClick={returnToBoard} aria-label="Campus board">⌂</a><a className="rail-link" href="#post" onClick={returnToBoard} aria-label="Post an item">＋</a><a className="rail-link" href="#updates" onClick={returnToBoard} aria-label="Updates">◷</a>{user && <><button className={`rail-link ${showMyListings ? 'active' : ''}`} type="button" onClick={openMyListings} aria-label="My listings">▤</button><a className="rail-link" href="#messages" onClick={returnToBoard} aria-label="Messages">✉</a></>}</div>
+          <div className="rail-links"><a className={`rail-link ${!showMyListings && !showMyClaims && !showNotificationHistory ? 'active' : ''}`} href="#board" onClick={returnToBoard} aria-label="Campus board">⌂</a><a className="rail-link" href="#post" onClick={returnToBoard} aria-label="Post an item">＋</a><a className="rail-link" href="#updates" onClick={returnToBoard} aria-label="Updates">◷</a>{user && <><button className={`rail-link ${showMyListings ? 'active' : ''}`} type="button" onClick={openMyListings} aria-label="My listings">▤</button><button className={`rail-link ${showMyClaims ? 'active' : ''}`} type="button" onClick={openMyClaims} aria-label="My claims">✓</button><a className="rail-link" href="#messages" onClick={returnToBoard} aria-label="Messages">✉</a></>}</div>
           <div className="rail-bottom"><span className="rail-avatar">{user?.name?.[0]?.toUpperCase() || 'G'}</span><button className="rail-link rail-exit" onClick={user ? signOut : () => { setMode('login'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} aria-label={user ? 'Sign out' : 'Sign in'}>{user ? '↗' : '→'}</button></div>
         </aside>
         <div className="dashboard-content">
@@ -419,7 +452,7 @@ export default function App() {
           </section>
           {message && <p className="notice" role="status">{message}</p>}
 
-          <div className={showNotificationHistory || showMyListings ? 'dashboard-main-view is-hidden' : 'dashboard-main-view'}>
+          <div className={showNotificationHistory || showMyListings || showMyClaims ? 'dashboard-main-view is-hidden' : 'dashboard-main-view'}>
           <div className="content-grid" id="board">
             <section className="panel post-panel" id="post">
               <div className="panel-heading"><div><p className="eyebrow">QUICK ACTION</p><h2>{user ? 'Post an item' : mode === 'login' ? 'Welcome back' : 'Create your account'}</h2></div><span className="panel-icon">✎</span></div>
@@ -483,6 +516,18 @@ export default function App() {
             </button>)}</div> : <div className="empty-state messages-empty"><span aria-hidden="true">✉</span><h3>No conversations yet</h3><p>Open a listing and choose “Message poster” to privately contact its owner.</p></div>}
           </section>}
           </div>
+          {showMyClaims && user && <section className="panel my-claims-page" aria-labelledby="my-claims-title">
+            <button className="history-back-button" type="button" onClick={returnToBoard}>← Back to campus board</button>
+            <div className="my-claims-heading"><div><p className="eyebrow">OWNERSHIP REQUESTS</p><h2 id="my-claims-title">My claims</h2><p>Track each claim and read the campus staff’s review notes.</p></div><div className="my-listings-heading-actions"><span className="my-listings-count">{myClaimsPagination.total} total</span><button className="button button-secondary" type="button" onClick={() => loadMyClaims(myClaimsPage)} disabled={myClaimsLoading}>Refresh</button></div></div>
+            {myClaimsError && <p className="notice" role="alert">{myClaimsError}</p>}
+            {myClaimsLoading ? <p className="history-loading">Loading your claims…</p> : myClaims.length ? <div className="my-claims-list">{myClaims.map((claim) => <article className="my-claim-card" key={claim._id || claim.id}>
+              <div className="my-claim-heading"><div><p className="eyebrow">{claim.item?.type === 'lost' ? 'LOST ITEM' : 'FOUND ITEM'}</p><h3>{claim.item?.title || 'Campus item'}</h3><span>{claim.item?.location || 'Location not listed'}</span></div><span className={`claim-status-pill ${claim.status}`}>{claim.status === 'approved' ? 'Approved' : claim.status === 'rejected' ? 'Not approved' : 'Pending review'}</span></div>
+              <div className="my-claim-proof"><strong>Your proof</strong><p>{claim.proof}</p></div>
+              {claim.adminNotes && <div className="my-claim-notes"><strong>Staff note</strong><p>{claim.adminNotes}</p></div>}
+              <div className="my-claim-footer"><small>{claim.reviewedAt ? `Reviewed ${new Date(claim.reviewedAt).toLocaleDateString()}` : claim.createdAt ? `Submitted ${new Date(claim.createdAt).toLocaleDateString()}` : 'Submitted recently'}</small>{claim.item && <button className="details-link" type="button" onClick={() => showDetails(claim.item)}>View listing <span aria-hidden="true">→</span></button>}</div>
+            </article>)}</div> : <div className="empty-state my-claims-empty"><span aria-hidden="true">✓</span><h3>No claims submitted</h3><p>If you recognize something on the found items board, submit an ownership claim and track the review here.</p><button className="button button-primary" type="button" onClick={returnToBoard}>Browse found items</button></div>}
+            {!myClaimsLoading && myClaimsPagination.pages > 1 && <nav className="listing-pagination" aria-label="My claims pages"><button className="button button-secondary" type="button" aria-label="Previous my claims" disabled={myClaimsPage <= 1} onClick={() => loadMyClaims(myClaimsPage - 1)}>Previous</button><span aria-live="polite">Page {myClaimsPage} of {myClaimsPagination.pages}</span><button className="button button-secondary" type="button" aria-label="Next my claims" disabled={myClaimsPage >= myClaimsPagination.pages} onClick={() => loadMyClaims(myClaimsPage + 1)}>Next</button></nav>}
+          </section>}
           {showMyListings && user && <section className="panel my-listings-page" aria-labelledby="my-listings-title">
             <button className="history-back-button" type="button" onClick={returnToBoard}>← Back to campus board</button>
             <div className="my-listings-heading"><div><p className="eyebrow">YOUR CAMPUS POSTS</p><h2 id="my-listings-title">My listings</h2><p>Keep track of items you posted, including those already returned.</p></div><div className="my-listings-heading-actions"><span className="my-listings-count">{myListingsPagination.total} total</span><button className="button button-secondary" type="button" onClick={() => loadMyListings(myListingsPage)} disabled={myListingsLoading}>Refresh</button></div></div>

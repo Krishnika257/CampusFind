@@ -213,6 +213,21 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
     } catch (error) { return next(error); }
   });
 
+  app.get('/api/my/claims', requireAuth, async (request, response, next) => {
+    try {
+      const requestedPage = Number.parseInt(request.query.page, 10);
+      const requestedLimit = Number.parseInt(request.query.limit, 10);
+      const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+      const limit = Number.isInteger(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, 50) : 12;
+      const filter = { claimant: request.userId };
+      const [claims, total] = await Promise.all([
+        Claim.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).populate({ path: 'item', select: 'title description type status category location createdAt' }),
+        Claim.countDocuments(filter),
+      ]);
+      return response.json({ claims, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+    } catch (error) { return next(error); }
+  });
+
   app.post('/api/items/:id/conversations', requireAuth, async (request, response, next) => {
     try {
       const item = await Item.findById(request.params.id);

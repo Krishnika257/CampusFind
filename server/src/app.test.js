@@ -43,11 +43,21 @@ function createModels() {
   const claimModel = {
     async findOne(filter) { return claims.find((claim) => claim.item === filter.item && claim.claimant === filter.claimant && claim.status === filter.status) || null; },
     async create(fields) {
-      const claim = { id: `claim-${claims.length + 1}`, status: 'pending', ...fields, async save() { return this; } };
+      const claim = { id: `claim-${claims.length + 1}`, status: 'pending', createdAt: new Date(Date.now() + claims.length), ...fields, async save() { return this; } };
       claims.push(claim);
       return claim;
     },
-    find() { return { sort() { return this; }, limit() { return this; }, async populate() { return claims; } }; },
+    find(filter = {}) {
+      let offset = 0;
+      let pageSize = 100;
+      let results = claims.filter((claim) => Object.entries(filter).every(([key, value]) => claim[key] === value));
+      return {
+        sort() { results = results.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)); return this; },
+        skip(value) { offset = value; return this; },
+        limit(value) { pageSize = value; return this; },
+        async populate() { return results.slice(offset, offset + pageSize); },
+      };
+    },
     async findById(id) { return claims.find((claim) => claim.id === id) || null; },
     async countDocuments(filter) { return claims.filter((claim) => Object.entries(filter).every(([key, value]) => claim[key] === value)).length; },
   };
@@ -362,6 +372,22 @@ describe('CampusFind API', () => {
     await request(app).post('/api/items/item-1/claims').set('Authorization', `Bearer ${token}`).send({ proof: 'I can identify the contents inside.' });
     const duplicate = await request(app).post('/api/items/item-1/claims').set('Authorization', `Bearer ${token}`).send({ proof: 'Another ownership detail is included.' });
     expect(duplicate.status).toBe(409);
+  });
+
+  it('returns only the signed-in user’s paginated claim history', async () => {
+    models.claims.push(
+      { id: 'claim-own-pending', claimant: 'student-1', item: { title: 'Blue bottle' }, status: 'pending', proof: 'A distinctive scratch is near the cap.', createdAt: new Date('2026-11-03') },
+      { id: 'claim-own-rejected', claimant: 'student-1', item: { title: 'Black wallet' }, status: 'rejected', proof: 'The card inside has my initials.', adminNotes: 'Please provide another identifying detail.', createdAt: new Date('2026-11-02') },
+      { id: 'claim-other', claimant: 'student-2', item: { title: 'Phone' }, status: 'approved', proof: 'My case has a sticker.', createdAt: new Date('2026-11-04') },
+    );
+    const unauthenticated = await request(app).get('/api/my/claims');
+    const token = jwt.sign({}, secret, { subject: 'student-1', expiresIn: '1h' });
+    const firstPage = await request(app).get('/api/my/claims?page=1&limit=1').set('Authorization', `Bearer ${token}`);
+    const secondPage = await request(app).get('/api/my/claims?page=2&limit=1').set('Authorization', `Bearer ${token}`);
+    expect(unauthenticated.status).toBe(401);
+    expect(firstPage.body.claims.map((claim) => claim.id)).toEqual(['claim-own-pending']);
+    expect(firstPage.body.pagination).toEqual({ page: 1, limit: 1, total: 2, pages: 2 });
+    expect(secondPage.body.claims[0]).toMatchObject({ id: 'claim-own-rejected', status: 'rejected', adminNotes: 'Please provide another identifying detail.' });
   });
 
   it('restricts claim review to admins and marks an approved item claimed', async () => {
