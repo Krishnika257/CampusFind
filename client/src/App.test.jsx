@@ -336,8 +336,9 @@ describe('CampusFind board', () => {
     expect(screen.getByText('Campus members')).toBeInTheDocument();
     expect(screen.getByText('75%')).toBeInTheDocument();
     expect(await screen.findByText('A small tear is inside the left pocket.')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Staff note for Green umbrella'), { target: { value: 'Please share one more identifying detail.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Approve & mark returned' }));
     expect(await screen.findByText('All caught up')).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/admin/claims/claim-1'), expect.objectContaining({ method: 'PATCH' }));
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/admin/claims/claim-1'), expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ status: 'approved', adminNotes: 'Please share one more identifying detail.' }) }));
   });
 });

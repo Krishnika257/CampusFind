@@ -403,6 +403,7 @@ describe('CampusFind API', () => {
     expect(forbidden.status).toBe(403);
     expect(approved.status).toBe(200);
     expect(approved.body.claim).toMatchObject({ status: 'approved', reviewedBy: 'admin-1' });
+    expect(approved.body.claim.adminNotes).toBe('Identity details verified.');
     expect(item.status).toBe('claimed');
     expect(models.notifications[0]).toMatchObject({ user: 'user-2', type: 'claim-approved' });
   });

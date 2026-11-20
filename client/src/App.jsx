@@ -45,6 +45,7 @@ export default function App() {
   const [claimProof, setClaimProof] = useState('');
   const [showClaimForm, setShowClaimForm] = useState(false);
   const [claims, setClaims] = useState([]);
+  const [claimReviewNotes, setClaimReviewNotes] = useState({});
   const [matchedItems, setMatchedItems] = useState([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [conversations, setConversations] = useState([]);
@@ -356,12 +357,13 @@ export default function App() {
     } catch { /* Ignore a temporary notification service outage. */ }
   }
 
-  async function reviewClaim(claimId, status) {
+  async function reviewClaim(claimId, status, adminNotes = '') {
     setMessage('');
     try {
-      const response = await fetch(`${API}/admin/claims/${claimId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ status }) });
+      const response = await fetch(`${API}/admin/claims/${claimId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ status, adminNotes }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not update this claim.');
+      setClaimReviewNotes((current) => { const next = { ...current }; delete next[claimId]; return next; });
       setMessage(`Claim ${status}.`); await loadAdminClaims(); await loadAdminStats(); await loadItems();
     } catch (error) { setMessage(error.message); }
   }
@@ -506,7 +508,8 @@ export default function App() {
             {claims.length ? <div className="claim-list">{claims.map((claim) => <article className="claim-card" key={claim._id}>
               <div className="claim-card-heading"><div><h3>{claim.item?.title || 'Campus item'}</h3><p>{claim.item?.location || 'Location not listed'} · Claimed by {claim.claimant?.name || 'Campus member'}</p></div><span className="pending-pill">Pending review</span></div>
               <p className="claim-proof">{claim.proof}</p>
-              <div className="claim-review-actions"><button className="button button-secondary reject-button" type="button" onClick={() => reviewClaim(claim._id, 'rejected')}>Reject claim</button><button className="button button-primary" type="button" onClick={() => reviewClaim(claim._id, 'approved')}>Approve &amp; mark returned</button></div>
+              <label className="claim-review-note">Staff note for {claim.item?.title || 'Campus item'}<textarea aria-label={`Staff note for ${claim.item?.title || 'Campus item'}`} maxLength="500" rows="2" placeholder="Optional note visible to the claimant" value={claimReviewNotes[claim._id] || ''} onChange={(event) => setClaimReviewNotes((current) => ({ ...current, [claim._id]: event.target.value }))} /><small>{(claimReviewNotes[claim._id] || '').length}/500 characters · shown in My Claims</small></label>
+              <div className="claim-review-actions"><button className="button button-secondary reject-button" type="button" onClick={() => reviewClaim(claim._id, 'rejected', claimReviewNotes[claim._id] || '')}>Reject claim</button><button className="button button-primary" type="button" onClick={() => reviewClaim(claim._id, 'approved', claimReviewNotes[claim._id] || '')}>Approve &amp; mark returned</button></div>
             </article>)}</div> : <div className="empty-state admin-empty"><span aria-hidden="true">✓</span><h3>All caught up</h3><p>New ownership claims will appear here for staff review.</p></div>}
           </section>}
           {user && <section className="panel messages-panel" id="messages">
