@@ -21,4 +21,17 @@ describe('rankMatches', () => {
 
     expect(rankMatches(source, candidates, 3)).toHaveLength(3);
   });
+
+  it('ranks close-in-time reports higher when their other signals match', () => {
+    const source = { title: 'Blue wallet', description: 'Silver keychain attached', category: 'Accessories', location: 'Central Library', createdAt: new Date('2026-11-20T10:00:00Z') };
+    const recent = { title: 'Blue wallet', description: 'Silver keychain attached', category: 'Accessories', location: 'Central Library', createdAt: new Date('2026-11-20T18:00:00Z') };
+    const older = { title: 'Blue wallet', description: 'Silver keychain attached', category: 'Accessories', location: 'Central Library', createdAt: new Date('2026-10-01T10:00:00Z') };
+
+    const matches = rankMatches(source, [older, recent]);
+
+    expect(matches[0].item).toBe(recent);
+    expect(matches[0].score).toBe(100);
+    expect(matches[0].reasons).toContain('Reported around the same time');
+    expect(matches[1].score).toBe(90);
+  });
 });

@@ -22,6 +22,18 @@ function textWords(item, fields) {
   return new Set(fields.flatMap((field) => [...words(item[field]) ]));
 }
 
+function reportTimeScore(first, second) {
+  const firstTime = new Date(first || '').getTime();
+  const secondTime = new Date(second || '').getTime();
+  if (!Number.isFinite(firstTime) || !Number.isFinite(secondTime)) return 0;
+  const daysApart = Math.floor(Math.abs(firstTime - secondTime) / 86_400_000);
+  if (daysApart <= 1) return 10;
+  if (daysApart <= 3) return 8;
+  if (daysApart <= 7) return 6;
+  if (daysApart <= 14) return 3;
+  return 0;
+}
+
 export function rankMatches(source, candidates, limit = 5) {
   const sourceLocation = words(source.location);
   const sourceKeywords = textWords(source, ['title', 'description']);
@@ -31,11 +43,11 @@ export function rankMatches(source, candidates, limit = 5) {
       let score = 0;
       const reasons = [];
       if (source.category && source.category === item.category) {
-        score += 30;
+        score += 25;
         reasons.push('Same category');
       }
 
-      const locationScore = Math.round(diceSimilarity(sourceLocation, words(item.location)) * 30);
+      const locationScore = Math.round(diceSimilarity(sourceLocation, words(item.location)) * 25);
       if (locationScore >= 8) {
         score += locationScore;
         reasons.push('Similar campus location');
@@ -45,6 +57,12 @@ export function rankMatches(source, candidates, limit = 5) {
       if (keywordScore >= 8) {
         score += keywordScore;
         reasons.push('Similar item details');
+      }
+
+      const timeScore = reportTimeScore(source.createdAt, item.createdAt);
+      if (timeScore) {
+        score += timeScore;
+        if (timeScore >= 5) reasons.push('Reported around the same time');
       }
 
       return { item, score: Math.min(100, score), reasons };
