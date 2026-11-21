@@ -399,10 +399,14 @@ describe('CampusFind API', () => {
     const adminToken = jwt.sign({ role: 'admin' }, secret, { subject: 'admin-1', expiresIn: '1h' });
 
     const forbidden = await request(app).get('/api/admin/claims').set('Authorization', `Bearer ${studentToken}`);
-    const approved = await request(app).patch('/api/admin/claims/claim-1').set('Authorization', `Bearer ${adminToken}`).send({ status: 'approved', adminNotes: 'Identity details verified.' });
+    const missingMethod = await request(app).patch('/api/admin/claims/claim-1').set('Authorization', `Bearer ${adminToken}`).send({ status: 'approved', adminNotes: 'Identity details verified.' });
     expect(forbidden.status).toBe(403);
+    expect(missingMethod.status).toBe(400);
+    expect(claim.status).toBe('pending');
+    expect(item.status).toBe('open');
+    const approved = await request(app).patch('/api/admin/claims/claim-1').set('Authorization', `Bearer ${adminToken}`).send({ status: 'approved', adminNotes: 'Identity details verified.', verificationMethod: 'private-detail' });
     expect(approved.status).toBe(200);
-    expect(approved.body.claim).toMatchObject({ status: 'approved', reviewedBy: 'admin-1' });
+    expect(approved.body.claim).toMatchObject({ status: 'approved', reviewedBy: 'admin-1', verificationMethod: 'private-detail' });
     expect(approved.body.claim.adminNotes).toBe('Identity details verified.');
     expect(item.status).toBe('claimed');
     expect(models.notifications[0]).toMatchObject({ user: 'user-2', type: 'claim-approved' });

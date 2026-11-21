@@ -23,6 +23,7 @@ const claimSchema = new mongoose.Schema({
   proof: { type: String, required: true, trim: true, minlength: 20, maxlength: 1000 },
   status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
   adminNotes: { type: String, trim: true, maxlength: 500, default: '' },
+  verificationMethod: { type: String, enum: ['private-detail', 'finder-confirmation', 'in-person-id'] },
   reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   reviewedAt: { type: Date },
 }, { timestamps: true });
