@@ -344,7 +344,7 @@ describe('CampusFind board', () => {
     fireEvent.click(await screen.findByRole('button', { name: /View details/i }));
     const dialog = await screen.findByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: /submit a claim/i }));
-    fireEvent.change(within(dialog).getByPlaceholderText('Describe a detail only the owner would know'), { target: { value: 'A small tear is inside the left pocket.' } });
+    fireEvent.change(within(dialog).getByPlaceholderText('Describe a detail not shown in the listing'), { target: { value: 'A small tear is inside the left pocket.' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Send claim' }));
 
     expect(await screen.findByText(/sent to campus staff for review/i)).toBeInTheDocument();
@@ -372,7 +372,10 @@ describe('CampusFind board', () => {
     expect(await screen.findByText('A small tear is inside the left pocket.')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Staff note for Green umbrella'), { target: { value: 'Please share one more identifying detail.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Approve & mark returned' }));
+    expect(screen.getByText('Pending ownership claims')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Verification method for Green umbrella'), { target: { value: 'private-detail' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Approve & mark returned' }));
     expect(await screen.findByText('All caught up')).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/admin/claims/claim-1'), expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ status: 'approved', adminNotes: 'Please share one more identifying detail.' }) }));
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/admin/claims/claim-1'), expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ status: 'approved', adminNotes: 'Please share one more identifying detail.', verificationMethod: 'private-detail' }) }));
   });
 });

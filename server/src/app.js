@@ -351,9 +351,11 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
 
   app.patch('/api/admin/claims/:id', requireAuth, requireAdmin, async (request, response, next) => {
     try {
-      const { status, adminNotes = '' } = request.body;
+      const { status, adminNotes = '', verificationMethod } = request.body;
       if (!['approved', 'rejected'].includes(status)) return response.status(400).json({ message: 'Decision must be approved or rejected.' });
       if (typeof adminNotes !== 'string' || adminNotes.trim().length > 500) return response.status(400).json({ message: 'Admin notes must be 500 characters or fewer.' });
+      const validVerificationMethods = ['private-detail', 'finder-confirmation', 'in-person-id'];
+      if (status === 'approved' && !validVerificationMethods.includes(verificationMethod)) return response.status(400).json({ message: 'Choose how ownership was verified before approving this claim.' });
       const claim = await Claim.findById(request.params.id);
       if (!claim) return response.status(404).json({ message: 'Claim not found.' });
       if (claim.status !== 'pending') return response.status(409).json({ message: 'This claim has already been reviewed.' });
@@ -365,6 +367,7 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
       }
       claim.status = status;
       claim.adminNotes = adminNotes.trim();
+      claim.verificationMethod = status === 'approved' ? verificationMethod : undefined;
       claim.reviewedBy = request.userId;
       claim.reviewedAt = new Date();
       await claim.save();

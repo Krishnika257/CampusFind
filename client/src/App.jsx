@@ -2,6 +2,11 @@ import React, { useEffect, useState } from 'react';
 
 const API = (import.meta.env.VITE_API_URL || 'http://localhost:4000/api').replace(/\/+$/, '');
 const emptyItem = { title: '', description: '', category: 'Other', location: '', type: 'lost' };
+const verificationMethodLabels = {
+  'private-detail': 'Matched a private identifying detail',
+  'finder-confirmation': 'Confirmed with the person who found it',
+  'in-person-id': 'Verified in person with campus ID',
+};
 
 function CampusFindMark() {
   return (
@@ -47,6 +52,7 @@ export default function App() {
   const [showClaimForm, setShowClaimForm] = useState(false);
   const [claims, setClaims] = useState([]);
   const [claimReviewNotes, setClaimReviewNotes] = useState({});
+  const [claimVerificationMethods, setClaimVerificationMethods] = useState({});
   const [matchedItems, setMatchedItems] = useState([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [conversations, setConversations] = useState([]);
@@ -368,13 +374,14 @@ export default function App() {
     } catch { /* Ignore a temporary notification service outage. */ }
   }
 
-  async function reviewClaim(claimId, status, adminNotes = '') {
+  async function reviewClaim(claimId, status, adminNotes = '', verificationMethod = '') {
     setMessage('');
     try {
-      const response = await fetch(`${API}/admin/claims/${claimId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ status, adminNotes }) });
+      const response = await fetch(`${API}/admin/claims/${claimId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ status, adminNotes, verificationMethod }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not update this claim.');
       setClaimReviewNotes((current) => { const next = { ...current }; delete next[claimId]; return next; });
+      setClaimVerificationMethods((current) => { const next = { ...current }; delete next[claimId]; return next; });
       setMessage(`Claim ${status}.`); await loadAdminClaims(); await loadAdminStats(); await loadItems();
     } catch (error) { setMessage(error.message); }
   }
@@ -510,9 +517,10 @@ export default function App() {
             <div className="panel-heading"><div><p className="eyebrow">STAFF REVIEW</p><h2>Pending ownership claims</h2></div><span className="admin-count">{claims.length}</span></div>
             {claims.length ? <div className="claim-list">{claims.map((claim) => <article className="claim-card" key={claim._id}>
               <div className="claim-card-heading"><div><h3>{claim.item?.title || 'Campus item'}</h3><p>{claim.item?.location || 'Location not listed'} · Claimed by {claim.claimant?.name || 'Campus member'}</p></div><span className="pending-pill">Pending review</span></div>
-              <p className="claim-proof">{claim.proof}</p>
+              <p className="claim-proof"><strong>Claimant’s ownership details</strong><br />{claim.proof}</p>
+              <label className="claim-review-note">Verification method<select aria-label={`Verification method for ${claim.item?.title || 'Campus item'}`} value={claimVerificationMethods[claim._id] || ''} onChange={(event) => setClaimVerificationMethods((current) => ({ ...current, [claim._id]: event.target.value }))}><option value="">Choose how this was verified</option><option value="private-detail">Matched a private identifying detail</option><option value="finder-confirmation">Confirmed with the person who found it</option><option value="in-person-id">Verified in person with campus ID</option></select><small>Confirm the handoff before marking the item returned.</small></label>
               <label className="claim-review-note">Staff note for {claim.item?.title || 'Campus item'}<textarea aria-label={`Staff note for ${claim.item?.title || 'Campus item'}`} maxLength="500" rows="2" placeholder="Optional note visible to the claimant" value={claimReviewNotes[claim._id] || ''} onChange={(event) => setClaimReviewNotes((current) => ({ ...current, [claim._id]: event.target.value }))} /><small>{(claimReviewNotes[claim._id] || '').length}/500 characters · shown in My Claims</small></label>
-              <div className="claim-review-actions"><button className="button button-secondary reject-button" type="button" onClick={() => reviewClaim(claim._id, 'rejected', claimReviewNotes[claim._id] || '')}>Reject claim</button><button className="button button-primary" type="button" onClick={() => reviewClaim(claim._id, 'approved', claimReviewNotes[claim._id] || '')}>Approve &amp; mark returned</button></div>
+              <div className="claim-review-actions"><button className="button button-secondary reject-button" type="button" onClick={() => reviewClaim(claim._id, 'rejected', claimReviewNotes[claim._id] || '')}>Reject claim</button><button className="button button-primary" type="button" disabled={!claimVerificationMethods[claim._id]} onClick={() => reviewClaim(claim._id, 'approved', claimReviewNotes[claim._id] || '', claimVerificationMethods[claim._id])}>Approve &amp; mark returned</button></div>
             </article>)}</div> : <div className="empty-state admin-empty"><span aria-hidden="true">✓</span><h3>All caught up</h3><p>New ownership claims will appear here for staff review.</p></div>}
           </section>}
           {user && <section className="panel messages-panel" id="messages">
@@ -545,6 +553,7 @@ export default function App() {
             {myClaimsLoading ? <p className="history-loading">Loading your claims…</p> : myClaims.length ? <div className="my-claims-list">{myClaims.map((claim) => <article className="my-claim-card" key={claim._id || claim.id}>
               <div className="my-claim-heading"><div><p className="eyebrow">{claim.item?.type === 'lost' ? 'LOST ITEM' : 'FOUND ITEM'}</p><h3>{claim.item?.title || 'Campus item'}</h3><span>{claim.item?.location || 'Location not listed'}</span></div><span className={`claim-status-pill ${claim.status}`}>{claim.status === 'approved' ? 'Approved' : claim.status === 'rejected' ? 'Not approved' : 'Pending review'}</span></div>
               <div className="my-claim-proof"><strong>Your proof</strong><p>{claim.proof}</p></div>
+              {claim.verificationMethod && <div className="my-claim-notes"><strong>Staff verification recorded</strong><p>{verificationMethodLabels[claim.verificationMethod] || 'Staff reviewed in person'}</p></div>}
               {claim.adminNotes && <div className="my-claim-notes"><strong>Staff note</strong><p>{claim.adminNotes}</p></div>}
               <div className="my-claim-footer"><small>{claim.reviewedAt ? `Reviewed ${new Date(claim.reviewedAt).toLocaleDateString()}` : claim.createdAt ? `Submitted ${new Date(claim.createdAt).toLocaleDateString()}` : 'Submitted recently'}</small>{claim.item && <button className="details-link" type="button" onClick={() => showDetails(claim.item)}>View listing <span aria-hidden="true">→</span></button>}</div>
             </article>)}</div> : <div className="empty-state my-claims-empty"><span aria-hidden="true">✓</span><h3>No claims submitted</h3><p>If you recognize something on the found items board, submit an ownership claim and track the review here.</p><button className="button button-primary" type="button" onClick={returnToBoard}>Browse found items</button></div>}
@@ -592,7 +601,7 @@ export default function App() {
                   </article>)}</div> : <p className="match-empty">No close matches yet. We’ll show suggestions as similar listings are posted.</p>}
                 </section>
                 {user && selectedItem.type === 'found' && selectedItem.status === 'open' && !isItemOwner(selectedItem) && <div className="claim-action">
-                  {showClaimForm ? <form className="form-stack" onSubmit={submitClaim}><label>Proof of ownership<textarea required minLength="20" maxLength="1000" rows="4" placeholder="Describe a detail only the owner would know" value={claimProof} onChange={(e) => setClaimProof(e.target.value)} /><small>Share specific details to help campus staff verify your claim.</small></label><div className="dialog-actions"><button className="button button-secondary" type="button" onClick={() => setShowClaimForm(false)}>Cancel</button><button className="button button-primary" type="submit">Send claim</button></div></form> : <button className="button button-primary claim-button" type="button" onClick={() => setShowClaimForm(true)}>This is mine — submit a claim</button>}
+                  {showClaimForm ? <form className="form-stack" onSubmit={submitClaim}><label>Proof of ownership<textarea required minLength="20" maxLength="1000" rows="4" placeholder="Describe a detail not shown in the listing" value={claimProof} onChange={(e) => setClaimProof(e.target.value)} /><small>Share a private identifying detail that is not in the public listing. Don’t include passwords, financial details, or other sensitive information.</small></label><div className="dialog-actions"><button className="button button-secondary" type="button" onClick={() => setShowClaimForm(false)}>Cancel</button><button className="button button-primary" type="submit">Send claim</button></div></form> : <button className="button button-primary claim-button" type="button" onClick={() => setShowClaimForm(true)}>This is mine — submit a claim</button>}
                 </div>}
                 {user && selectedItem.status === 'open' && !isItemOwner(selectedItem) && <button className="button button-secondary message-poster-button" type="button" onClick={() => startConversation(selectedItem)}>Message poster</button>}
                 {!user && selectedItem.status === 'open' && <p className="sign-in-claim-note">Sign in to privately message the person who posted this item.</p>}
