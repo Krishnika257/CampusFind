@@ -6,10 +6,11 @@ import { resolve } from 'node:path';
 import { Item, User } from './models.js';
 
 export const DEMO_PASSWORD = 'CampusFindDemo123!';
+export const DEMO_USER_EMAILS = ['riya.student@example.invalid', 'kabir.student@example.invalid'];
 
 const demoUsers = [
-  { name: 'Riya Sharma', email: 'riya.student@example.invalid' },
-  { name: 'Kabir Mehta', email: 'kabir.student@example.invalid' },
+  { name: 'Riya Sharma', email: DEMO_USER_EMAILS[0] },
+  { name: 'Kabir Mehta', email: DEMO_USER_EMAILS[1] },
 ];
 
 const demoListings = [
