@@ -1,51 +1,101 @@
 # CampusFind
 
-CampusFind is a campus lost-and-found app. Students can report lost or found items, browse listings, and request the return of an item.
+CampusFind is a campus lost-and-found application. Students can post lost and found items, search listings, submit ownership claims, and coordinate returns through private messages.
 
-## MVP plan (9–10 days)
+## Features
 
-1. Setup and a running client/server skeleton
-2. Accounts and lost/found item posting
-3. Browse, search, and filtering
-4. Claim submission and basic admin review
-5. Verification, bug fixes, and deployment preparation
+- Student registration and sign-in with hashed passwords and JWT authentication. Public registration always creates a student account.
+- Create, edit, and delete your own listings; view a personal listings page.
+- Browse open listings and filter by keyword, category, location, lost/found type, and date. Results are paginated.
+- View listing details and suggested matches between lost and found items.
+- Submit a claim with private ownership details. The person who posted a found listing can review claims on that item; an admin can review claims from the dashboard as a backup. Approval records a verification method and marks the item as returned.
+- Private in-app conversations, message notifications, match alerts, and notification history.
+- Admin dashboard with campus activity and claim statistics.
+- Responsive mobile layout and light/dark themes.
 
-## Stack
+Claim review is a human check: the reviewer should confirm an identifying detail and arrange the handoff before approving. The app does not verify email ownership or enforce a specific email domain.
 
-- Client: React, Vite, and Tailwind CSS
+## Technology
+
+- Client: React and Vite, styled with CSS
 - API: Node.js and Express
-- Database: MongoDB
+- Database: MongoDB and Mongoose
 - Authentication: JWT and bcrypt
+- Tests: Vitest, Testing Library, and Supertest
+- CI: GitHub Actions runs tests and builds the client for pull requests and pushes to `main`.
 
-## Getting started
+## Requirements
 
-Requirements: Node.js 20 or newer and npm.
+- Node.js 20 or newer
+- npm
+- MongoDB Community Server running locally, or a MongoDB connection URI
+
+## Run locally
+
+From the repository root:
 
 ```sh
 npm install
+```
+
+Copy `server/.env.example` to `server/.env` and configure the database URI and JWT secret. The default database URI is `mongodb://127.0.0.1:27017/campusfind`. Copy `client/.env.example` to `client/.env` if you need to change the API URL; the local default is `http://localhost:4000/api`.
+
+Start the client and API together:
+
+```sh
 npm run dev
 ```
 
-The Vite client runs at <http://localhost:5173>. The API runs at <http://localhost:4000> and exposes `GET /api/health`.
+- Client: <http://localhost:5173>
+- API health check: <http://localhost:4000/api/health>
 
-Copy `server/.env.example` to `server/.env` before connecting MongoDB or configuring authentication. Copy `client/.env.example` to `client/.env` to configure the API URL; the default is `http://localhost:4000/api`. For deployment, set `VITE_API_URL` to the deployed API base URL ending in `/api`, and set `CLIENT_ORIGIN` on the API to the deployed client origin. Never commit `.env` files.
+The API requires `JWT_SECRET`. Set `CLIENT_ORIGIN` to the client origin when running the client from a different host or port. Never commit `.env` files or production secrets.
 
-Public registration always creates a student account. To make a trusted account an administrator for the demo, the project maintainer must update that user's `role` field to `admin` in the `campusfind.users` collection using MongoDB Compass. Do this only after verifying the account belongs to the intended staff member; email ownership is not verified by the app yet.
+## Tests and production build
 
-## Optional demo data
+Run the automated test suite:
 
-To populate a local MongoDB database with fictional accounts and example lost/found listings, configure `server/.env` and run:
+```sh
+npm test
+```
+
+Build the client for deployment:
+
+```sh
+npm run build --workspace @campusfind/client
+```
+
+## Optional student demo data
+
+To add two fictional student accounts and five sample listings to the database configured for the server, run:
 
 ```sh
 npm run seed:demo
 ```
 
-The script adds two student accounts and five listings. Sign in with either `riya.student@example.invalid` or `kabir.student@example.invalid`; the shared sample password is `CampusFindDemo123!`. These credentials are for local demonstration only. The script is safe to rerun, will not overwrite a reserved demo account with a different password, and refuses to run when `NODE_ENV=production`. It creates no administrator account. Do not run demo seeding against a production database.
+Sample student logins:
 
-To create/promote a separate local admin demo account and add example posts, conversations, messages, and notifications, set `DEMO_ADMIN_EMAIL` and `DEMO_ADMIN_PASSWORD` in the server process environment, then run:
+- `riya.student@example.invalid`
+- `kabir.student@example.invalid`
+- Shared sample password: `CampusFindDemo123!`
+
+The command is repeatable and refuses to run when `NODE_ENV=production`. Use it only with a development database; do not seed production data.
+
+## Optional local admin and activity demo
+
+To create or promote a local admin account and add three admin listings, two conversations, sample messages, and notifications, set `DEMO_ADMIN_EMAIL` and `DEMO_ADMIN_PASSWORD`, then run:
 
 ```sh
 npm run seed:admin-demo
 ```
 
-The admin seeder is restricted to localhost MongoDB, refuses production mode, and does not print or store the password in source files. If that email already belongs to an account with a different password, the script stops without changing that account. To intentionally reset an existing local demo account's password, set `DEMO_ADMIN_RESET_PASSWORD=YES` for that run.
+The admin seeder only connects to a localhost MongoDB host and refuses `NODE_ENV=production`. If the account already exists with a different password, it stops without changing it. To intentionally reset the password for that local demo account, set `DEMO_ADMIN_RESET_PASSWORD=YES` for that run. Do not put real credentials in source files or commit them.
+
+## Deployment configuration
+
+Deploy the client and API as separate services and use a remotely reachable MongoDB database. Configure these environment values on the relevant service:
+
+- Client build: `VITE_API_URL`, set to the deployed API base URL ending in `/api`
+- API: `MONGODB_URI`, `JWT_SECRET`, `CLIENT_ORIGIN`, and the hosting platform's `PORT`
+
+Use a strong, private JWT secret and set `CLIENT_ORIGIN` to the exact deployed client origin. Do not run either demo seeder against a production database.
