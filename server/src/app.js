@@ -53,6 +53,46 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
     }));
   }
 
+  async function handleClaimReview(request, response, next) {
+    try {
+      const { status, adminNotes = '', verificationMethod } = request.body || {};
+      if (!['approved', 'rejected'].includes(status)) return response.status(400).json({ message: 'Decision must be approved or rejected.' });
+      if (typeof adminNotes !== 'string' || adminNotes.trim().length > 500) return response.status(400).json({ message: 'Review notes must be 500 characters or fewer.' });
+      const validVerificationMethods = ['private-detail', 'finder-confirmation', 'in-person-id'];
+      if (status === 'approved' && !validVerificationMethods.includes(verificationMethod)) return response.status(400).json({ message: 'Choose how ownership was verified before approving this claim.' });
+
+      const claim = await Claim.findById(request.params.id);
+      if (!claim) return response.status(404).json({ message: 'Claim not found.' });
+      const item = await Item.findById(claim.item.toString());
+      if (!item) return response.status(404).json({ message: 'Listing not found.' });
+      const isAdmin = request.userRole === 'admin';
+      const isListingOwner = item.owner?.toString() === request.userId;
+      if (!isAdmin && !isListingOwner) return response.status(403).json({ message: 'Only the person who posted this listing or an admin can review its claims.' });
+      if (claim.status !== 'pending') return response.status(409).json({ message: 'This claim has already been reviewed.' });
+
+      if (status === 'approved') {
+        if (item.type !== 'found' || item.status !== 'open') return response.status(409).json({ message: 'The listing is no longer available.' });
+        item.status = 'claimed';
+        await item.save();
+      }
+      claim.status = status;
+      claim.adminNotes = adminNotes.trim();
+      claim.verificationMethod = status === 'approved' ? verificationMethod : undefined;
+      claim.reviewedBy = request.userId;
+      claim.reviewedAt = new Date();
+      await claim.save();
+      const relatedItem = await Item.findById(claim.item.toString());
+      await safelyCreateNotification({
+        user: claim.claimant,
+        type: status === 'approved' ? 'claim-approved' : 'claim-rejected',
+        title: status === 'approved' ? 'Claim approved' : 'Claim update',
+        message: `Your claim for “${relatedItem?.title || 'a campus item'}” was ${status}.`,
+        item: relatedItem?._id || relatedItem?.id,
+      });
+      return response.json({ claim });
+    } catch (error) { return next(error); }
+  }
+
   app.get('/api/health', (_request, response) => {
     response.json({ status: 'ok', service: 'campusfind-api', database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected' });
   });
@@ -213,6 +253,18 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
     } catch (error) { return next(error); }
   });
 
+  app.get('/api/items/:id/claims', requireAuth, async (request, response, next) => {
+    try {
+      const item = await Item.findById(request.params.id);
+      if (!item) return response.status(404).json({ message: 'Listing not found.' });
+      if (item.owner?.toString() !== request.userId && request.userRole !== 'admin') return response.status(403).json({ message: 'Only the person who posted this listing or an admin can view its claims.' });
+      const claims = await Claim.find({ item: item.id || item._id, status: 'pending' }).sort({ createdAt: 1 }).limit(100).populate('claimant', 'name');
+      return response.json({ claims });
+    } catch (error) { return next(error); }
+  });
+
+  app.patch('/api/claims/:id/review', requireAuth, handleClaimReview);
+
   app.get('/api/my/claims', requireAuth, async (request, response, next) => {
     try {
       const requestedPage = Number.parseInt(request.query.page, 10);
@@ -349,39 +401,7 @@ export function createApp({ User = defaultUser, Item = defaultItem, Claim = defa
     } catch (error) { return next(error); }
   });
 
-  app.patch('/api/admin/claims/:id', requireAuth, requireAdmin, async (request, response, next) => {
-    try {
-      const { status, adminNotes = '', verificationMethod } = request.body;
-      if (!['approved', 'rejected'].includes(status)) return response.status(400).json({ message: 'Decision must be approved or rejected.' });
-      if (typeof adminNotes !== 'string' || adminNotes.trim().length > 500) return response.status(400).json({ message: 'Admin notes must be 500 characters or fewer.' });
-      const validVerificationMethods = ['private-detail', 'finder-confirmation', 'in-person-id'];
-      if (status === 'approved' && !validVerificationMethods.includes(verificationMethod)) return response.status(400).json({ message: 'Choose how ownership was verified before approving this claim.' });
-      const claim = await Claim.findById(request.params.id);
-      if (!claim) return response.status(404).json({ message: 'Claim not found.' });
-      if (claim.status !== 'pending') return response.status(409).json({ message: 'This claim has already been reviewed.' });
-      if (status === 'approved') {
-        const item = await Item.findById(claim.item.toString());
-        if (!item || item.status !== 'open') return response.status(409).json({ message: 'The listing is no longer available.' });
-        item.status = 'claimed';
-        await item.save();
-      }
-      claim.status = status;
-      claim.adminNotes = adminNotes.trim();
-      claim.verificationMethod = status === 'approved' ? verificationMethod : undefined;
-      claim.reviewedBy = request.userId;
-      claim.reviewedAt = new Date();
-      await claim.save();
-      const relatedItem = await Item.findById(claim.item.toString());
-      await safelyCreateNotification({
-        user: claim.claimant,
-        type: status === 'approved' ? 'claim-approved' : 'claim-rejected',
-        title: status === 'approved' ? 'Claim approved' : 'Claim update',
-        message: `Your claim for “${relatedItem?.title || 'a campus item'}” was ${status}.`,
-        item: relatedItem?._id || relatedItem?.id,
-      });
-      return response.json({ claim });
-    } catch (error) { return next(error); }
-  });
+  app.patch('/api/admin/claims/:id', requireAuth, requireAdmin, handleClaimReview);
 
   app.use((error, _request, response, _next) => {
     if (error?.name === 'CastError') return response.status(404).json({ message: 'Listing not found.' });

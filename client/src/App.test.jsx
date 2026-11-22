@@ -347,8 +347,36 @@ describe('CampusFind board', () => {
     fireEvent.change(within(dialog).getByPlaceholderText('Describe a detail not shown in the listing'), { target: { value: 'A small tear is inside the left pocket.' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Send claim' }));
 
-    expect(await screen.findByText(/sent to campus staff for review/i)).toBeInTheDocument();
+    expect(await screen.findByText(/sent to the person who posted this listing/i)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/items/item-1/claims'), expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('lets the owner of a found listing review a claim from its details', async () => {
+    localStorage.setItem('campusfind-user', JSON.stringify({ id: 'owner-1', name: 'Ari', role: 'student' }));
+    localStorage.setItem('campusfind-token', 'owner-token');
+    const item = { _id: 'item-1', title: 'Green umbrella', description: 'Found by the cafe', category: 'Other', location: 'Cafe', type: 'found', status: 'open', owner: { _id: 'owner-1', name: 'Ari' } };
+    const claim = { _id: 'claim-1', claimant: { name: 'Riley' }, proof: 'A small tear is inside the left pocket.', status: 'pending' };
+    let reviewed = false;
+    const fetchMock = vi.fn().mockImplementation(async (url, options = {}) => {
+      const path = new URL(String(url), 'http://localhost').pathname;
+      if (path.endsWith('/claims/claim-1/review') && options.method === 'PATCH') { reviewed = true; return { ok: true, json: async () => ({ claim: { ...claim, status: 'approved' } }) }; }
+      if (path.endsWith('/items/item-1/claims')) return { ok: true, json: async () => ({ claims: reviewed ? [] : [claim] }) };
+      if (path.endsWith('/items/item-1/matches')) return { ok: true, json: async () => ({ matches: [] }) };
+      if (path.endsWith('/items/item-1')) return { ok: true, json: async () => ({ item }) };
+      if (path.endsWith('/items')) return { ok: true, json: async () => ({ items: [item], pagination: { page: 1, pages: 1, total: 1, limit: 12 } }) };
+      return { ok: true, json: async () => ({ conversations: [], notifications: [], unreadCount: 0 }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /View details/i }));
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByText('A small tear is inside the left pocket.')).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText('Owner verification method for Green umbrella'), { target: { value: 'finder-confirmation' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Approve & mark returned' }));
+
+    expect(await within(dialog).findByText('No claims are waiting for this listing.')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/claims/claim-1/review'), expect.objectContaining({ method: 'PATCH' }));
   });
 
   it('shows pending claims to admins and lets them approve one', async () => {
