@@ -41,3 +41,11 @@ npm run seed:demo
 ```
 
 The script adds two student accounts and five listings. Sign in with either `riya.student@example.invalid` or `kabir.student@example.invalid`; the shared sample password is `CampusFindDemo123!`. These credentials are for local demonstration only. The script is safe to rerun, will not overwrite a reserved demo account with a different password, and refuses to run when `NODE_ENV=production`. It creates no administrator account. Do not run demo seeding against a production database.
+
+To create/promote a separate local admin demo account and add example posts, conversations, messages, and notifications, set `DEMO_ADMIN_EMAIL` and `DEMO_ADMIN_PASSWORD` in the server process environment, then run:
+
+```sh
+npm run seed:admin-demo
+```
+
+The admin seeder is restricted to localhost MongoDB, refuses production mode, and does not print or store the password in source files. If that email already belongs to an account with a different password, the script stops without changing that account. To intentionally reset an existing local demo account's password, set `DEMO_ADMIN_RESET_PASSWORD=YES` for that run.
