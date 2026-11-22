@@ -51,6 +51,9 @@ export default function App() {
   const [claimProof, setClaimProof] = useState('');
   const [showClaimForm, setShowClaimForm] = useState(false);
   const [claims, setClaims] = useState([]);
+  const [ownedItemClaims, setOwnedItemClaims] = useState([]);
+  const [ownedItemClaimsLoading, setOwnedItemClaimsLoading] = useState(false);
+  const [ownedItemClaimsError, setOwnedItemClaimsError] = useState('');
   const [claimReviewNotes, setClaimReviewNotes] = useState({});
   const [claimVerificationMethods, setClaimVerificationMethods] = useState({});
   const [matchedItems, setMatchedItems] = useState([]);
@@ -226,6 +229,9 @@ export default function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not load listing details.');
       setSelectedItem(data.item);
+      setOwnedItemClaims([]);
+      setOwnedItemClaimsError('');
+      if (user && data.item.type === 'found' && isItemOwner(data.item)) await loadOwnedItemClaims(data.item);
       setMatchedItems([]);
       setMatchesLoading(true);
       fetch(`${API}/items/${item._id}/matches`)
@@ -280,7 +286,7 @@ export default function App() {
       const response = await fetch(`${API}/items/${selectedItem._id}/claims`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ proof: claimProof }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not submit your claim.');
-      setClaimProof(''); setShowClaimForm(false); setMessage('Your claim was sent to campus staff for review.');
+      setClaimProof(''); setShowClaimForm(false); setMessage('Your claim was sent to the person who posted this listing.');
     } catch (error) { setMessage(error.message); }
   }
 
@@ -291,6 +297,22 @@ export default function App() {
       if (!response.ok) throw new Error(data.message || 'Could not load claims.');
       setClaims(data.claims);
     } catch (error) { setMessage(error.message); }
+  }
+
+  async function loadOwnedItemClaims(item) {
+    if (!item?._id || !token) return;
+    setOwnedItemClaimsLoading(true);
+    setOwnedItemClaimsError('');
+    try {
+      const response = await fetch(`${API}/items/${item._id}/claims`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Could not load claims for this listing.');
+      setOwnedItemClaims(data.claims || []);
+    } catch (error) {
+      setOwnedItemClaimsError(error.message);
+    } finally {
+      setOwnedItemClaimsLoading(false);
+    }
   }
 
   async function loadNotifications() {
@@ -374,15 +396,24 @@ export default function App() {
     } catch { /* Ignore a temporary notification service outage. */ }
   }
 
-  async function reviewClaim(claimId, status, adminNotes = '', verificationMethod = '') {
+  async function reviewClaim(claimId, status, adminNotes = '', verificationMethod = '', reviewMode = 'admin') {
     setMessage('');
     try {
-      const response = await fetch(`${API}/admin/claims/${claimId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ status, adminNotes, verificationMethod }) });
+      const reviewPath = reviewMode === 'owner' ? `/claims/${claimId}/review` : `/admin/claims/${claimId}`;
+      const response = await fetch(`${API}${reviewPath}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ status, adminNotes, verificationMethod }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Could not update this claim.');
       setClaimReviewNotes((current) => { const next = { ...current }; delete next[claimId]; return next; });
       setClaimVerificationMethods((current) => { const next = { ...current }; delete next[claimId]; return next; });
-      setMessage(`Claim ${status}.`); await loadAdminClaims(); await loadAdminStats(); await loadItems();
+      setMessage(`Claim ${status}.`);
+      if (reviewMode === 'owner' && selectedItem) {
+        if (status === 'approved') setSelectedItem((current) => current ? { ...current, status: 'claimed' } : current);
+        await loadOwnedItemClaims(selectedItem);
+      } else {
+        await loadAdminClaims(); await loadAdminStats();
+      }
+      await loadItems();
+      if (showMyListings) await loadMyListings(myListingsPage);
     } catch (error) { setMessage(error.message); }
   }
 
@@ -548,13 +579,13 @@ export default function App() {
           </section>}
           {showMyClaims && user && <section className="panel my-claims-page" aria-labelledby="my-claims-title">
             <button className="history-back-button" type="button" onClick={returnToBoard}>← Back to campus board</button>
-            <div className="my-claims-heading"><div><p className="eyebrow">OWNERSHIP REQUESTS</p><h2 id="my-claims-title">My claims</h2><p>Track each claim and read the campus staff’s review notes.</p></div><div className="my-listings-heading-actions"><span className="my-listings-count">{myClaimsPagination.total} total</span><button className="button button-secondary" type="button" onClick={() => loadMyClaims(myClaimsPage)} disabled={myClaimsLoading}>Refresh</button></div></div>
+            <div className="my-claims-heading"><div><p className="eyebrow">OWNERSHIP REQUESTS</p><h2 id="my-claims-title">My claims</h2><p>Track each claim and read the listing reviewer’s notes.</p></div><div className="my-listings-heading-actions"><span className="my-listings-count">{myClaimsPagination.total} total</span><button className="button button-secondary" type="button" onClick={() => loadMyClaims(myClaimsPage)} disabled={myClaimsLoading}>Refresh</button></div></div>
             {myClaimsError && <p className="notice" role="alert">{myClaimsError}</p>}
             {myClaimsLoading ? <p className="history-loading">Loading your claims…</p> : myClaims.length ? <div className="my-claims-list">{myClaims.map((claim) => <article className="my-claim-card" key={claim._id || claim.id}>
               <div className="my-claim-heading"><div><p className="eyebrow">{claim.item?.type === 'lost' ? 'LOST ITEM' : 'FOUND ITEM'}</p><h3>{claim.item?.title || 'Campus item'}</h3><span>{claim.item?.location || 'Location not listed'}</span></div><span className={`claim-status-pill ${claim.status}`}>{claim.status === 'approved' ? 'Approved' : claim.status === 'rejected' ? 'Not approved' : 'Pending review'}</span></div>
               <div className="my-claim-proof"><strong>Your proof</strong><p>{claim.proof}</p></div>
-              {claim.verificationMethod && <div className="my-claim-notes"><strong>Staff verification recorded</strong><p>{verificationMethodLabels[claim.verificationMethod] || 'Staff reviewed in person'}</p></div>}
-              {claim.adminNotes && <div className="my-claim-notes"><strong>Staff note</strong><p>{claim.adminNotes}</p></div>}
+              {claim.verificationMethod && <div className="my-claim-notes"><strong>Verification recorded by reviewer</strong><p>{verificationMethodLabels[claim.verificationMethod] || 'Reviewed in person'}</p></div>}
+              {claim.adminNotes && <div className="my-claim-notes"><strong>Reviewer note</strong><p>{claim.adminNotes}</p></div>}
               <div className="my-claim-footer"><small>{claim.reviewedAt ? `Reviewed ${new Date(claim.reviewedAt).toLocaleDateString()}` : claim.createdAt ? `Submitted ${new Date(claim.createdAt).toLocaleDateString()}` : 'Submitted recently'}</small>{claim.item && <button className="details-link" type="button" onClick={() => showDetails(claim.item)}>View listing <span aria-hidden="true">→</span></button>}</div>
             </article>)}</div> : <div className="empty-state my-claims-empty"><span aria-hidden="true">✓</span><h3>No claims submitted</h3><p>If you recognize something on the found items board, submit an ownership claim and track the review here.</p><button className="button button-primary" type="button" onClick={returnToBoard}>Browse found items</button></div>}
             {!myClaimsLoading && myClaimsPagination.pages > 1 && <nav className="listing-pagination" aria-label="My claims pages"><button className="button button-secondary" type="button" aria-label="Previous my claims" disabled={myClaimsPage <= 1} onClick={() => loadMyClaims(myClaimsPage - 1)}>Previous</button><span aria-live="polite">Page {myClaimsPage} of {myClaimsPagination.pages}</span><button className="button button-secondary" type="button" aria-label="Next my claims" disabled={myClaimsPage >= myClaimsPagination.pages} onClick={() => loadMyClaims(myClaimsPage + 1)}>Next</button></nav>}
@@ -594,6 +625,17 @@ export default function App() {
                 <h2 id="item-dialog-title" className="item-dialog-title">{selectedItem.title}</h2>
                 <p className="item-dialog-description">{selectedItem.description}</p>
                 <div className="item-detail-grid"><div><span>Category</span><strong>{selectedItem.category}</strong></div><div><span>Location</span><strong>{selectedItem.location}</strong></div><div><span>Posted by</span><strong>{selectedItem.owner?.name || 'Campus member'}</strong></div><div><span>Date posted</span><strong>{selectedItem.createdAt ? new Date(selectedItem.createdAt).toLocaleDateString() : 'Recently'}</strong></div></div>
+                {user && selectedItem.type === 'found' && isItemOwner(selectedItem) && <section className="match-suggestions owner-claim-review" aria-label="Claims on your listing">
+                  <div className="match-heading"><h3>Claims for your listing</h3><span>{ownedItemClaims.length} pending</span></div>
+                  {ownedItemClaimsError && <p className="notice" role="alert">{ownedItemClaimsError}</p>}
+                  {ownedItemClaimsLoading ? <p className="match-empty">Loading ownership claims…</p> : ownedItemClaims.length ? <div className="claim-list">{ownedItemClaims.map((claim) => <article className="claim-card" key={claim._id}>
+                    <div className="claim-card-heading"><div><h3>{claim.claimant?.name || 'Campus member'}</h3><p>Claiming this item</p></div><span className="pending-pill">Pending review</span></div>
+                    <p className="claim-proof"><strong>Ownership details</strong><br />{claim.proof}</p>
+                    <label className="claim-review-note">How did you verify ownership?<select aria-label={`Owner verification method for ${selectedItem.title}`} value={claimVerificationMethods[claim._id] || ''} onChange={(event) => setClaimVerificationMethods((current) => ({ ...current, [claim._id]: event.target.value }))}><option value="">Choose a verification method</option><option value="private-detail">Matched a private identifying detail</option><option value="finder-confirmation">Confirmed details in person with the claimant</option><option value="in-person-id">Checked campus ID in person</option></select><small>Verify the identifying detail and hand over the item before approving.</small></label>
+                    <label className="claim-review-note">Note for claimant<textarea aria-label={`Owner review note for ${selectedItem.title}`} maxLength="500" rows="2" placeholder="Optional note visible to the claimant" value={claimReviewNotes[claim._id] || ''} onChange={(event) => setClaimReviewNotes((current) => ({ ...current, [claim._id]: event.target.value }))} /></label>
+                    <div className="claim-review-actions"><button className="button button-secondary reject-button" type="button" onClick={() => reviewClaim(claim._id, 'rejected', claimReviewNotes[claim._id] || '', '', 'owner')}>Reject claim</button><button className="button button-primary" type="button" disabled={!claimVerificationMethods[claim._id]} onClick={() => reviewClaim(claim._id, 'approved', claimReviewNotes[claim._id] || '', claimVerificationMethods[claim._id], 'owner')}>Approve &amp; mark returned</button></div>
+                  </article>)}</div> : <p className="match-empty">No claims are waiting for this listing.</p>}
+                </section>}
                 <section className="match-suggestions" aria-label="Possible matching listings">
                   <div className="match-heading"><h3>Possible matches</h3><span>Opposite listing type</span></div>
                   {matchesLoading ? <p className="match-empty">Looking for similar items…</p> : matchedItems.length ? <div className="match-list">{matchedItems.map(({ item, score, reasons }) => <article className="match-card" key={item._id}>

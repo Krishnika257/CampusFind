@@ -28,6 +28,7 @@ function createModels() {
       };
     },
     async create(fields) { const item = { id: `item-${items.length + 1}`, ...fields }; items.push(item); return item; },
+    async findById(id) { return items.find((item) => item.id === id || item._id === id) || null; },
     async countDocuments(filter) { return items.filter((item) => Object.entries(filter).every(([key, value]) => item[key] === value)).length; },
   };
   const userModel = {
@@ -391,7 +392,7 @@ describe('CampusFind API', () => {
   });
 
   it('restricts claim review to admins and marks an approved item claimed', async () => {
-    const item = { id: 'item-1', status: 'open', async save() { return this; } };
+    const item = { id: 'item-1', type: 'found', status: 'open', async save() { return this; } };
     const claim = { id: 'claim-1', item: 'item-1', claimant: 'user-2', status: 'pending', async save() { return this; } };
     models.Item.findById = vi.fn().mockResolvedValue(item);
     models.Claim.findById = vi.fn().mockResolvedValue(claim);
@@ -410,6 +411,28 @@ describe('CampusFind API', () => {
     expect(approved.body.claim.adminNotes).toBe('Identity details verified.');
     expect(item.status).toBe('claimed');
     expect(models.notifications[0]).toMatchObject({ user: 'user-2', type: 'claim-approved' });
+  });
+
+  it('lets only the listing owner or an admin view and review claims for that listing', async () => {
+    const item = { id: 'found-item-1', owner: 'finder-1', type: 'found', status: 'open', title: 'Blue bottle', async save() { return this; } };
+    const claim = { id: 'claim-owner-1', item: item.id, claimant: 'claimant-1', status: 'pending', proof: 'A scratch is hidden beneath the cap.', async save() { return this; } };
+    models.items.push(item);
+    models.claims.push(claim);
+    const ownerToken = jwt.sign({ role: 'student' }, secret, { subject: 'finder-1', expiresIn: '1h' });
+    const strangerToken = jwt.sign({ role: 'student' }, secret, { subject: 'stranger-1', expiresIn: '1h' });
+
+    const visible = await request(app).get(`/api/items/${item.id}/claims`).set('Authorization', `Bearer ${ownerToken}`);
+    const hidden = await request(app).get(`/api/items/${item.id}/claims`).set('Authorization', `Bearer ${strangerToken}`);
+    const rejectedAccess = await request(app).patch(`/api/claims/${claim.id}/review`).set('Authorization', `Bearer ${strangerToken}`).send({ status: 'rejected' });
+    expect(visible.status).toBe(200);
+    expect(visible.body.claims).toHaveLength(1);
+    expect(hidden.status).toBe(403);
+    expect(rejectedAccess.status).toBe(403);
+
+    const reviewed = await request(app).patch(`/api/claims/${claim.id}/review`).set('Authorization', `Bearer ${ownerToken}`).send({ status: 'approved', verificationMethod: 'finder-confirmation' });
+    expect(reviewed.status).toBe(200);
+    expect(reviewed.body.claim).toMatchObject({ status: 'approved', reviewedBy: 'finder-1', verificationMethod: 'finder-confirmation' });
+    expect(item.status).toBe('claimed');
   });
 
   it('does not allow public registration to assign an administrator role', async () => {
